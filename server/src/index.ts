@@ -9,7 +9,7 @@ app.use(cors())
 const httpServer = createServer(app)
 const io = new Server(httpServer, {
   cors: {
-    origin: 'http://localhost:5173',
+    origin: '*',
     methods: ['GET', 'POST']
   }
 })
@@ -898,7 +898,7 @@ io.on('connection', (socket) => {
   })
 })
 
-const PORT = process.env.PORT || 3001
-httpServer.listen(PORT, () => {
+const PORT = process.env.PORT || 8080
+httpServer.listen(Number(PORT), '0.0.0.0', () => {
   console.log(`Server running on port ${PORT}`)
 })

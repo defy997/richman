@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { useGameStore } from '../store/gameStore'
 
 export default function Dice() {
-  const { diceValue, isRolling } = useGameStore()
+  const { diceValue } = useGameStore()
   const [animation, setAnimation] = useState(false)
 
   if (diceValue === null) return null

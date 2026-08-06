@@ -9,7 +9,7 @@ function App() {
   const { gamePhase, socket, setSocket, updateGameState, addMessage } = useGameStore()
 
   useEffect(() => {
-    const newSocket: Socket = io('http://localhost:3001')
+    const newSocket: Socket = io('/')
     setSocket(newSocket)
 
     newSocket.on('connect', () => {
