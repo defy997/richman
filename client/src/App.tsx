@@ -6,10 +6,10 @@ import GameBoard from './components/GameBoard'
 import './App.css'
 
 function App() {
-  const { gamePhase, socket, setSocket, updateGameState, addMessage } = useGameStore()
+  const { gamePhase, socket, setSocket, setMyPlayerId, updateGameState, addMessage } = useGameStore()
 
   useEffect(() => {
-    const newSocket: Socket = io('/')
+    const newSocket: Socket = io()
     setSocket(newSocket)
 
     newSocket.on('connect', () => {
@@ -34,9 +34,21 @@ function App() {
       addMessage(msg.type as any, msg.content)
     })
 
+    // 关键：监听房间创建/加入事件来设置 myPlayerId
+    newSocket.on('roomCreated', ({ playerId }: { roomCode: string; playerId: string }) => {
+      console.log('roomCreated, playerId:', playerId)
+      setMyPlayerId(playerId)
+    })
+
+    newSocket.on('roomJoined', ({ playerId }: { roomCode: string; playerId: string }) => {
+      console.log('roomJoined, playerId:', playerId)
+      setMyPlayerId(playerId)
+    })
+
     return () => {
       newSocket.disconnect()
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   return (

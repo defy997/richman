@@ -1,173 +1,250 @@
 import { useState } from 'react'
 import { useGameStore } from '../store/gameStore'
+import { createPortal } from 'react-dom'
 
 export default function BankPanel() {
-  const { socket, myPlayerId, players, cells, selectedCell } = useGameStore()
+  const { socket, players, myPlayerId } = useGameStore()
   const [isOpen, setIsOpen] = useState(false)
-  const [action, setAction] = useState<'cashToDeposit' | 'depositToCash' | 'upgrade' | 'buy' | 'loan'>('cashToDeposit')
   const [amount, setAmount] = useState(0)
 
+  const currentPlayerIndex = useGameStore(s => s.currentPlayerIndex)
+  const isMyTurn = players[currentPlayerIndex]?.id === myPlayerId
   const myPlayer = players.find(p => p.id === myPlayerId)
-  const selectedProperty = selectedCell !== null ? cells[selectedCell] : null
+  const passedBank = myPlayer?.passedBank || false
 
-  const canUpgrade = selectedProperty?.owner === myPlayerId && (selectedProperty?.level || 0) < 4
-  const upgradeCost = selectedProperty ? Math.floor(selectedProperty.basePrice * 0.5) : 0
-
-  const handleConvert = () => {
-    if (amount <= 0) return
-    
-    if (action === 'cashToDeposit' && myPlayer && myPlayer.cash < amount) {
-      return
-    }
-    if (action === 'depositToCash' && myPlayer && myPlayer.deposit < amount) {
-      return
-    }
-    
-    socket?.emit('bankConvert', { action, amount })
+  const handleDeposit = () => {
+    if (!isMyTurn || !passedBank || amount <= 0) return
+    socket?.emit('bankDeposit', { amount })
     setAmount(0)
   }
 
-  const handleUpgrade = () => {
-    if (!selectedProperty || !canUpgrade) return
-    socket?.emit('upgradeProperty', { cellId: selectedProperty.id })
+  const handleWithdraw = () => {
+    if (!isMyTurn || !passedBank || amount <= 0) return
+    socket?.emit('bankWithdraw', { amount })
+    setAmount(0)
   }
 
-  const handleBuyProperty = () => {
-    if (!selectedProperty || selectedProperty.owner) return
-    socket?.emit('buyProperty', { cellId: selectedProperty.id })
+  const handleRepay = (loanId: string) => {
+    if (!isMyTurn) return
+    socket?.emit('repayLoan', { loanId })
   }
 
-  const handleLoan = () => {
-    if (amount <= 0) return
+  const handleTakeLoan = () => {
+    if (!isMyTurn || !passedBank || amount <= 0) return
     socket?.emit('takeLoan', { amount })
     setAmount(0)
   }
 
+  const maxLoan = myPlayer ? Math.floor(myPlayer.deposit * 0.5) : 0
+
   return (
-    <div className="bg-secondary rounded-xl p-4">
-      <div 
-        className="flex items-center justify-between cursor-pointer"
-        onClick={() => setIsOpen(!isOpen)}
-      >
-        <h2 className="text-lg font-bold">银行</h2>
-        <span className="text-gray-400">{isOpen ? '▼' : '▶'}</span>
-      </div>
-
-      {isOpen && (
-        <div className="mt-4 space-y-4">
-          {/* Cash <-> Deposit */}
-          <div className="bg-primary rounded-lg p-3 space-y-3">
-            <h3 className="text-sm font-bold">现金/存款转换</h3>
-            <div className="grid grid-cols-2 gap-2">
-              <button
-                onClick={() => setAction('cashToDeposit')}
-                className={`
-                  py-2 rounded text-sm font-bold
-                  ${action === 'cashToDeposit' ? 'bg-blue-600' : 'bg-gray-700'}
-                `}
-              >
-                现金→存款
-              </button>
-              <button
-                onClick={() => setAction('depositToCash')}
-                className={`
-                  py-2 rounded text-sm font-bold
-                  ${action === 'depositToCash' ? 'bg-blue-600' : 'bg-gray-700'}
-                `}
-              >
-                存款→现金
-              </button>
+    <>
+      <div className="p-3">
+        <div
+          className="bg-primary rounded-lg p-2 cursor-pointer hover:bg-primary/80 transition-colors"
+          onClick={(e) => { e.stopPropagation(); setIsOpen(true) }}
+        >
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <span className="text-xl">🏦</span>
+              <span className="text-sm font-bold">银行</span>
             </div>
-            <div className="flex gap-2">
-              <input
-                type="number"
-                value={amount}
-                onChange={e => setAmount(Math.max(0, parseInt(e.target.value) || 0))}
-                className="flex-1 px-3 py-2 bg-secondary rounded"
-                placeholder="金额"
-              />
-              <button
-                onClick={handleConvert}
-                className="px-4 py-2 bg-accent hover:bg-red-600 rounded font-bold"
-              >
-                转换
-              </button>
-            </div>
+            <span className="text-xs text-gray-400">
+              {passedBank ? '✅ 可用' : '需在银行地块'}
+            </span>
           </div>
-
-          {/* Property Actions */}
-          {selectedProperty && selectedProperty.type === 'empty' && (
-            <div className="bg-primary rounded-lg p-3 space-y-3">
-              <h3 className="text-sm font-bold">地皮: {selectedProperty.name}</h3>
-              
-              {!selectedProperty.owner && (
-                <div className="flex justify-between items-center">
-                  <span>价格: ${selectedProperty.price}</span>
-                  <button
-                    onClick={handleBuyProperty}
-                    disabled={myPlayer && myPlayer.cash < (selectedProperty.price || 0)}
-                    className={`
-                      px-4 py-2 rounded font-bold
-                      ${myPlayer && myPlayer.cash >= (selectedProperty.price || 0)
-                        ? 'bg-accent hover:bg-red-600'
-                        : 'bg-gray-700 text-gray-500 cursor-not-allowed'}
-                    `}
-                  >
-                    购买
-                  </button>
-                </div>
-              )}
-
-              {selectedProperty.owner === myPlayerId && canUpgrade && (
-                <div className="flex justify-between items-center">
-                  <span>升级 (Lv.{selectedProperty.level}→{selectedProperty.level + 1}): ${upgradeCost}</span>
-                  <button
-                    onClick={handleUpgrade}
-                    disabled={myPlayer && myPlayer.cash < upgradeCost}
-                    className={`
-                      px-4 py-2 rounded font-bold
-                      ${myPlayer && myPlayer.cash >= upgradeCost
-                        ? 'bg-accent hover:bg-red-600'
-                        : 'bg-gray-700 text-gray-500 cursor-not-allowed'}
-                    `}
-                  >
-                    升级
-                  </button>
-                </div>
-              )}
-
-              {selectedProperty.level >= 4 && selectedProperty.owner === myPlayerId && (
-                <div className="text-gold text-sm">已达最高等级!</div>
-              )}
-            </div>
-          )}
-
-          {/* Loan */}
-          <div className="bg-primary rounded-lg p-3 space-y-3">
-            <h3 className="text-sm font-bold">贷款</h3>
-            <div className="text-xs text-gray-400">
-              可贷额度: ${myPlayer ? Math.floor(myPlayer.deposit * 0.5) : 0}
-              <br />
-              利率: 10%
-            </div>
-            <div className="flex gap-2">
-              <input
-                type="number"
-                value={amount}
-                onChange={e => setAmount(Math.max(0, parseInt(e.target.value) || 0))}
-                className="flex-1 px-3 py-2 bg-secondary rounded"
-                placeholder="贷款金额"
-              />
-              <button
-                onClick={handleLoan}
-                className="px-4 py-2 bg-green-600 hover:bg-green-700 rounded font-bold"
-              >
-                贷款
-              </button>
-            </div>
+          <div className="mt-1 flex gap-3 text-xs">
+            <span className="text-green-400">💵 ${myPlayer?.cash.toLocaleString()}</span>
+            <span className="text-blue-400">🏦 ${myPlayer?.deposit.toLocaleString()}</span>
           </div>
         </div>
+      </div>
+
+      {isOpen && createPortal(
+        <div
+          style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, zIndex: 9999, backgroundColor: 'rgba(0,0,0,0.7)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+          onClick={() => setIsOpen(false)}
+        >
+          <div
+            style={{ width: '600px', maxWidth: '95vw', maxHeight: '90vh' }}
+            className="bg-secondary rounded-xl shadow-2xl overflow-hidden"
+            onClick={e => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between px-4 py-3 bg-primary/50 border-b border-gray-700">
+              <div className="flex items-center gap-2">
+                <span className="text-xl">🏦</span>
+                <span className="text-sm font-bold">银行</span>
+                {passedBank ? (
+                  <span className="px-2 py-0.5 bg-green-600/30 text-green-400 text-xs rounded">✅ 在银行</span>
+                ) : (
+                  <span className="px-2 py-0.5 bg-red-600/30 text-red-400 text-xs rounded">⚠️ 需站在银行地块</span>
+                )}
+              </div>
+              <button onClick={() => setIsOpen(false)} className="w-8 h-8 rounded-full bg-gray-700 hover:bg-gray-600 text-gray-300 flex items-center justify-center text-lg">×</button>
+            </div>
+
+            <div className="p-4 space-y-4 overflow-y-auto" style={{ maxHeight: 'calc(90vh - 60px)' }}>
+              <div className="grid grid-cols-3 gap-2">
+                <div className="bg-primary rounded-lg p-3 text-center">
+                  <div className="text-xs text-gray-400">现金</div>
+                  <div className="text-green-400 font-bold text-lg">${myPlayer?.cash.toLocaleString()}</div>
+                </div>
+                <div className="bg-primary rounded-lg p-3 text-center">
+                  <div className="text-xs text-gray-400">存款</div>
+                  <div className="text-blue-400 font-bold text-lg">${myPlayer?.deposit.toLocaleString()}</div>
+                </div>
+                <div className="bg-primary rounded-lg p-3 text-center">
+                  <div className="text-xs text-gray-400">贷款</div>
+                  <div className="text-red-400 font-bold text-lg">
+                    ${(myPlayer?.loans || []).reduce((sum, l) => sum + l.amount + Math.floor(l.amount * l.interestRate), 0).toLocaleString()}
+                  </div>
+                </div>
+              </div>
+
+              <div className="bg-primary rounded-lg p-4 space-y-3">
+                <div className="text-sm font-bold text-blue-400">💱 现金 ↔ 存款</div>
+                {!passedBank && (
+                  <div className="text-xs text-yellow-400 bg-yellow-900/30 rounded p-2">
+                    ⚠️ 必须站在银行地块（地块5）才能使用
+                  </div>
+                )}
+                {passedBank && (
+                  <>
+                    <div className="flex gap-1">
+                      {[500, 1000, 5000, 10000].map(a => (
+                        <button
+                          key={a}
+                          type="button"
+                          onClick={() => setAmount(a)}
+                          className={`flex-1 py-1 text-xs rounded ${amount === a ? 'bg-accent text-white' : 'bg-gray-700'}`}
+                        >
+                          ${a >= 1000 ? `${a/1000}K` : a}
+                        </button>
+                      ))}
+                    </div>
+                    <input
+                      type="number"
+                      value={amount || ''}
+                      onChange={e => setAmount(Math.max(0, parseInt(e.target.value) || 0))}
+                      className="w-full px-3 py-2 bg-secondary rounded text-sm"
+                      placeholder="输入金额 (1%手续费)"
+                    />
+                    <div className="grid grid-cols-2 gap-2">
+                      <button
+                        type="button"
+                        onClick={handleDeposit}
+                        disabled={!isMyTurn || !myPlayer || myPlayer.cash < amount || amount <= 0}
+                        className={`py-2 text-sm rounded-lg font-bold ${
+                          isMyTurn && myPlayer && myPlayer.cash >= amount && amount > 0
+                            ? 'bg-blue-600 hover:bg-blue-700 text-white cursor-pointer'
+                            : 'bg-gray-700 text-gray-500 cursor-not-allowed'
+                        }`}
+                      >
+                        存钱
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleWithdraw}
+                        disabled={!isMyTurn || !myPlayer || myPlayer.deposit < amount || amount <= 0}
+                        className={`py-2 text-sm rounded-lg font-bold ${
+                          isMyTurn && myPlayer && myPlayer.deposit >= amount && amount > 0
+                            ? 'bg-green-600 hover:bg-green-700 text-white cursor-pointer'
+                            : 'bg-gray-700 text-gray-500 cursor-not-allowed'
+                        }`}
+                      >
+                        取钱
+                      </button>
+                    </div>
+                    <div className="text-xs text-gray-500 text-center">手续费 1%</div>
+                  </>
+                )}
+              </div>
+
+              <div className="bg-primary rounded-lg p-4 space-y-3">
+                <div className="text-sm font-bold text-red-400">💰 贷款 (利率10%，5回合到期)</div>
+                {(!myPlayer?.properties.length || myPlayer.properties.length === 0) ? (
+                  <div className="text-xs text-red-400 bg-red-900/30 rounded p-2">
+                    ⚠️ 需要拥有至少1块地皮才能贷款
+                  </div>
+                ) : passedBank ? (
+                  <>
+                    <div className="grid grid-cols-2 gap-2 text-xs">
+                      <div>房产: <span className="text-yellow-400 font-bold">{myPlayer?.properties.length} 块</span></div>
+                      <div>可贷: <span className="text-green-400 font-bold">${maxLoan.toLocaleString()}</span></div>
+                    </div>
+                    <div className="flex gap-1">
+                      {[1000, 5000, 10000, 20000].filter(a => a <= maxLoan).map(a => (
+                        <button
+                          key={a}
+                          type="button"
+                          onClick={() => setAmount(a)}
+                          className={`flex-1 py-1 text-xs rounded ${amount === a ? 'bg-red-600 text-white' : 'bg-gray-700'}`}
+                        >
+                          ${a >= 1000 ? `${a/1000}K` : a}
+                        </button>
+                      ))}
+                      <button
+                        type="button"
+                        onClick={() => setAmount(maxLoan)}
+                        className={`flex-1 py-1 text-xs rounded ${amount === maxLoan ? 'bg-red-600 text-white' : 'bg-gray-700'}`}
+                      >
+                        全部
+                      </button>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={handleTakeLoan}
+                      disabled={!isMyTurn || !passedBank || amount <= 0 || amount > maxLoan}
+                      className={`w-full py-2 text-sm rounded-lg font-bold ${
+                        isMyTurn && passedBank && amount > 0 && amount <= maxLoan
+                          ? 'bg-red-600 hover:bg-red-700 text-white cursor-pointer'
+                          : 'bg-gray-700 text-gray-500 cursor-not-allowed'
+                      }`}
+                    >
+                      贷款
+                    </button>
+                  </>
+                ) : (
+                  <div className="text-xs text-yellow-400 bg-yellow-900/30 rounded p-2">
+                    ⚠️ 必须站在银行地块才能贷款
+                  </div>
+                )}
+              </div>
+
+              {(myPlayer?.loans || []).length > 0 && (
+                <div className="bg-primary rounded-lg p-4 space-y-2">
+                  <div className="text-sm font-bold text-orange-400">📋 未还贷款</div>
+                  {(myPlayer?.loans || []).map(loan => (
+                    <div key={loan.id} className="bg-secondary rounded p-3 flex items-center justify-between">
+                      <div>
+                        <div className="text-red-400 font-bold text-sm">
+                          ${loan.amount} + 利息 ${Math.floor(loan.amount * loan.interestRate)}
+                        </div>
+                        <div className="text-xs text-gray-500">
+                          剩余 {loan.turnsRemaining} 回合到期
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => handleRepay(loan.id)}
+                        disabled={!isMyTurn}
+                        className={`px-4 py-2 rounded-lg text-sm font-bold ${
+                          isMyTurn
+                            ? 'bg-green-600 hover:bg-green-700 text-white cursor-pointer'
+                            : 'bg-gray-700 text-gray-500 cursor-not-allowed'
+                        }`}
+                      >
+                        还款
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>,
+        document.body
       )}
-    </div>
+    </>
   )
 }
