@@ -2,7 +2,7 @@ import { useMemo } from 'react'
 import { useGameStore } from '../store/gameStore'
 
 export default function PlayerInfo() {
-  const { players, myPlayerId, mode, targetAssets, cells, stocks } = useGameStore()
+  const { players, myPlayerId, mode, targetAssets, cells, stocks, futures } = useGameStore()
 
   const myPlayer = players.find(p => p.id === myPlayerId)
 
@@ -12,20 +12,23 @@ export default function PlayerInfo() {
     return amount.toString()
   }
 
+  // 钻石期货价格
+  const diamondPrice = useMemo(() => {
+    const f = futures.find(x => x.type === 'diamond')
+    return f ? f.price : 5000
+  }, [futures])
+
   // 计算我的资产明细
   const assetDetails = useMemo(() => {
     if (!myPlayer) return null
 
-    // 现金
     const cash = myPlayer.cash
-
-    // 存款
     const deposit = myPlayer.deposit
 
-    // 钻石 (按 $100/颗 估值)
-    const diamondsValue = myPlayer.diamonds * 100
+    // 钻石价值 = 当前钻石期货价格 × 数量
+    const diamondsValue = myPlayer.diamonds * diamondPrice
 
-    // 股票市值
+    // 股票市值（做空不计为资产）
     let stockValue = 0
     let longValue = 0
     let shortValue = 0
@@ -37,36 +40,45 @@ export default function PlayerInfo() {
         longValue += stock.price * h.quantity
       }
       if ((h.shortQuantity || 0) > 0) {
-        // 做空市值估算：当前价 * 空头数量（成本估算）
         shortValue += stock.price * (h.shortQuantity || 0)
       }
     })
     stockValue = longValue
 
-    // 期货（占位：暂无期货持仓记录）
-    const futuresValue = 0
+    // 期货持仓价值
+    let futuresValue = 0
+    const myFutures = myPlayer.futuresHoldings || []
+    myFutures.forEach(h => {
+      const f = futures.find(x => x.symbol === h.symbol)
+      if (!f) return
+      if (h.longQuantity > 0) futuresValue += f.price * h.longQuantity
+      // 做空为负债,不计入资产
+    })
 
     // 地产价值
     let propertyValue = 0
     myPlayer.properties.forEach(cellId => {
       const cell = cells[cellId]
       if (cell) {
-        // 升级后的房产价值更高
         propertyValue += cell.basePrice * (1 + (cell.level || 0) * 0.5)
       }
     })
 
-    // 贷款扣除
-    const loanDebt = myPlayer.loans.reduce((sum, l) => sum + l.amount + Math.floor(l.amount * l.interestRate), 0)
+    // 贷款扣除（按已用天数计算利息）
+    const loanDebt = myPlayer.loans.reduce((sum, l) => {
+      const daysElapsed = 30 - l.turnsRemaining
+      const interest = Math.floor(l.amount * l.interestRate * Math.min(daysElapsed, 30) / 30)
+      return sum + l.amount + interest
+    }, 0)
 
-    const total = cash + deposit + diamondsValue + stockValue + propertyValue - loanDebt
+    const total = cash + deposit + diamondsValue + stockValue + futuresValue + propertyValue - loanDebt
 
     return {
-      cash, deposit, diamondsValue, diamonds: myPlayer.diamonds,
+      cash, deposit, diamondsValue, diamonds: myPlayer.diamonds, diamondPrice,
       stockValue, longValue, shortValue, futuresValue, propertyValue,
-      loanDebt, myStocks, total
+      loanDebt, myStocks, myFutures, total
     }
-  }, [myPlayer, stocks, cells])
+  }, [myPlayer, stocks, cells, futures, diamondPrice])
 
   return (
     <div className="bg-secondary rounded-xl p-3">
@@ -97,8 +109,8 @@ export default function PlayerInfo() {
               <span className="text-blue-400 font-bold">${assetDetails.deposit.toLocaleString()}</span>
             </div>
             <div className="flex justify-between">
-              <span className="text-gray-400">💎 钻石 × {assetDetails.diamonds}</span>
-              <span className="text-yellow-300 font-bold">${assetDetails.diamondsValue.toLocaleString()}</span>
+              <span className="text-gray-400">💎 × {assetDetails.diamonds} @${Math.round(assetDetails.diamondPrice).toLocaleString()}</span>
+              <span className="text-yellow-300 font-bold">${Math.round(assetDetails.diamondsValue).toLocaleString()}</span>
             </div>
             <div className="flex justify-between">
               <span className="text-gray-400">📈 股票 × {assetDetails.myStocks.length}</span>
@@ -108,6 +120,12 @@ export default function PlayerInfo() {
               <div className="flex justify-between">
                 <span className="text-gray-400">📉 做空中</span>
                 <span className="text-orange-400 font-bold">${Math.round(assetDetails.shortValue).toLocaleString()}</span>
+              </div>
+            )}
+            {assetDetails.futuresValue > 0 && (
+              <div className="flex justify-between">
+                <span className="text-gray-400">🛢️ 期货多</span>
+                <span className="text-yellow-400 font-bold">${Math.round(assetDetails.futuresValue).toLocaleString()}</span>
               </div>
             )}
             <div className="flex justify-between">

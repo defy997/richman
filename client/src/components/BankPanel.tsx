@@ -1,9 +1,9 @@
-import { useState } from 'react'
+import { useState, useMemo } from 'react'
 import { useGameStore } from '../store/gameStore'
 import { createPortal } from 'react-dom'
 
 export default function BankPanel() {
-  const { socket, players, myPlayerId } = useGameStore()
+  const { socket, players, myPlayerId, cells } = useGameStore()
   const [isOpen, setIsOpen] = useState(false)
   const [amount, setAmount] = useState(0)
 
@@ -35,7 +35,17 @@ export default function BankPanel() {
     setAmount(0)
   }
 
-  const maxLoan = myPlayer ? Math.floor(myPlayer.deposit * 0.5) : 0
+  // 房产估值 = sum(basePrice * (1 + level * 0.5))
+  const propertyValue = useMemo(() => {
+    if (!myPlayer) return 0
+    return myPlayer.properties.reduce((sum, cellId) => {
+      const cell = cells[cellId]
+      if (!cell) return sum
+      return sum + cell.basePrice * (1 + cell.level * 0.5)
+    }, 0)
+  }, [myPlayer?.properties, cells])
+
+  const maxLoan = Math.floor(propertyValue * 10)
 
   return (
     <>
@@ -161,7 +171,7 @@ export default function BankPanel() {
               </div>
 
               <div className="bg-primary rounded-lg p-4 space-y-3">
-                <div className="text-sm font-bold text-red-400">💰 贷款 (利率10%，5回合到期)</div>
+                <div className="text-sm font-bold text-red-400">💰 贷款 (月利率5%，30天到期，随时可还)</div>
                 {(!myPlayer?.properties.length || myPlayer.properties.length === 0) ? (
                   <div className="text-xs text-red-400 bg-red-900/30 rounded p-2">
                     ⚠️ 需要拥有至少1块地皮才能贷款
@@ -169,16 +179,16 @@ export default function BankPanel() {
                 ) : passedBank ? (
                   <>
                     <div className="grid grid-cols-2 gap-2 text-xs">
-                      <div>房产: <span className="text-yellow-400 font-bold">{myPlayer?.properties.length} 块</span></div>
-                      <div>可贷: <span className="text-green-400 font-bold">${maxLoan.toLocaleString()}</span></div>
+                      <div>房产估值: <span className="text-yellow-400 font-bold">${Math.round(propertyValue).toLocaleString()}</span></div>
+                      <div>可贷(×10): <span className="text-green-400 font-bold">${maxLoan.toLocaleString()}</span></div>
                     </div>
-                    <div className="flex gap-1">
-                      {[1000, 5000, 10000, 20000].filter(a => a <= maxLoan).map(a => (
+                    <div className="flex gap-1 flex-wrap">
+                      {[1000, 5000, 10000, 20000, 50000].filter(a => a <= maxLoan).map(a => (
                         <button
                           key={a}
                           type="button"
                           onClick={() => setAmount(a)}
-                          className={`flex-1 py-1 text-xs rounded ${amount === a ? 'bg-red-600 text-white' : 'bg-gray-700'}`}
+                          className={`flex-1 min-w-[60px] py-1 text-xs rounded ${amount === a ? 'bg-red-600 text-white' : 'bg-gray-700'}`}
                         >
                           ${a >= 1000 ? `${a/1000}K` : a}
                         </button>
@@ -186,7 +196,7 @@ export default function BankPanel() {
                       <button
                         type="button"
                         onClick={() => setAmount(maxLoan)}
-                        className={`flex-1 py-1 text-xs rounded ${amount === maxLoan ? 'bg-red-600 text-white' : 'bg-gray-700'}`}
+                        className={`flex-1 min-w-[60px] py-1 text-xs rounded ${amount === maxLoan ? 'bg-red-600 text-white' : 'bg-gray-700'}`}
                       >
                         全部
                       </button>
@@ -201,7 +211,7 @@ export default function BankPanel() {
                           : 'bg-gray-700 text-gray-500 cursor-not-allowed'
                       }`}
                     >
-                      贷款
+                      贷款 ${amount.toLocaleString()}
                     </button>
                   </>
                 ) : (
@@ -214,30 +224,34 @@ export default function BankPanel() {
               {(myPlayer?.loans || []).length > 0 && (
                 <div className="bg-primary rounded-lg p-4 space-y-2">
                   <div className="text-sm font-bold text-orange-400">📋 未还贷款</div>
-                  {(myPlayer?.loans || []).map(loan => (
-                    <div key={loan.id} className="bg-secondary rounded p-3 flex items-center justify-between">
-                      <div>
-                        <div className="text-red-400 font-bold text-sm">
-                          ${loan.amount} + 利息 ${Math.floor(loan.amount * loan.interestRate)}
+                  {(myPlayer?.loans || []).map(loan => {
+                    const daysElapsed = 30 - loan.turnsRemaining
+                    const interest = Math.floor(loan.amount * loan.interestRate * Math.min(daysElapsed, 30) / 30)
+                    return (
+                      <div key={loan.id} className="bg-secondary rounded p-3 flex items-center justify-between">
+                        <div>
+                          <div className="text-red-400 font-bold text-sm">
+                            ${loan.amount} + 利息 ${interest}
+                          </div>
+                          <div className="text-xs text-gray-500">
+                            剩余 {loan.turnsRemaining} 回合到期
+                          </div>
                         </div>
-                        <div className="text-xs text-gray-500">
-                          剩余 {loan.turnsRemaining} 回合到期
-                        </div>
+                        <button
+                          type="button"
+                          onClick={() => handleRepay(loan.id)}
+                          disabled={!isMyTurn}
+                          className={`px-4 py-2 rounded-lg text-sm font-bold ${
+                            isMyTurn
+                              ? 'bg-green-600 hover:bg-green-700 text-white cursor-pointer'
+                              : 'bg-gray-700 text-gray-500 cursor-not-allowed'
+                          }`}
+                        >
+                          还款
+                        </button>
                       </div>
-                      <button
-                        type="button"
-                        onClick={() => handleRepay(loan.id)}
-                        disabled={!isMyTurn}
-                        className={`px-4 py-2 rounded-lg text-sm font-bold ${
-                          isMyTurn
-                            ? 'bg-green-600 hover:bg-green-700 text-white cursor-pointer'
-                            : 'bg-gray-700 text-gray-500 cursor-not-allowed'
-                        }`}
-                      >
-                        还款
-                      </button>
-                    </div>
-                  ))}
+                    )
+                  })}
                 </div>
               )}
             </div>

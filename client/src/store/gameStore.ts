@@ -21,6 +21,7 @@ export interface Player {
   isBankrupt: boolean
   cards: string[]
   stocks: StockHolding[]
+  futuresHoldings?: FuturesHolding[]
   loans: Loan[]
   passedBank: boolean
   isCurrentTurn: boolean
@@ -35,6 +36,8 @@ export interface StockHolding {
   avgCost: number
   shortQuantity?: number
   shortAvgCost?: number
+  shortMarginFrozen?: number
+  shortCashReceived?: number
 }
 
 export interface Cell {
@@ -42,9 +45,18 @@ export interface Cell {
   type: 'empty' | 'chance' | 'destiny' | 'diamond' | 'start' | 'bank' | 'stock' | 'futures'
   name: string
   price?: number
-  owner?: string
+  owner?: string | null
   level: number
   basePrice: number
+  visitCount?: number
+}
+
+export interface KLine {
+  open: number
+  high: number
+  low: number
+  close: number
+  volume: number
 }
 
 export interface Stock {
@@ -59,6 +71,38 @@ export interface Stock {
   limitUp?: boolean
   limitDown?: boolean
   kline?: number[]
+  // 高级模拟
+  history: KLine[]
+  base: number
+  eventEffect: number
+  eventDays: number
+  eventDesc: string
+  consolidateDays: number
+  isConsolidating: boolean
+  isNoManipulator: boolean
+  noManipulatorDays: number
+  volumes: number[]
+  open: number
+  high: number
+  low: number
+  // 技术指标
+  ma5?: (number | null)[]
+  ma10?: (number | null)[]
+  ma20?: (number | null)[]
+  rsi?: (number | null)[]
+  macd?: number[]
+  dif?: number[]
+  dea?: number[]
+}
+
+export interface FuturesHolding {
+  symbol: string
+  longQuantity: number
+  longAvgCost: number
+  shortQuantity: number
+  shortAvgCost: number
+  shortInitialMargin: number
+  shortMaintenanceMargin: number
 }
 
 export interface FuturesContract {
@@ -67,6 +111,26 @@ export interface FuturesContract {
   price: number
   change: number
   unit: number
+  // 高级模拟字段
+  base: number
+  history: KLine[]
+  volumes: number[]
+  eventEffect: number
+  eventDays: number
+  eventDesc: string
+  consolidateDays: number
+  isConsolidating: boolean
+  isNoManipulator: boolean
+  noManipulatorDays: number
+  open: number
+  high: number
+  low: number
+  kline?: number[]
+  ma5?: (number | null)[]
+  ma10?: (number | null)[]
+  ma20?: (number | null)[]
+  news?: string
+  type: 'gold' | 'silver' | 'diamond'
 }
 
 export interface GameMessage {
@@ -87,6 +151,7 @@ export interface GameState {
   cells: Cell[]
   stocks: Stock[]
   futures: FuturesContract[]
+  gameDate: string
   currentPlayerIndex: number
   currentTurn: number
   gamePhase: 'lobby' | 'playing' | 'ended'
@@ -116,6 +181,7 @@ const initialState: GameState = {
   cells: [],
   stocks: [],
   futures: [],
+  gameDate: '',
   currentPlayerIndex: 0,
   currentTurn: 1,
   gamePhase: 'lobby',

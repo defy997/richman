@@ -7,6 +7,7 @@ import CardPanel from './CardPanel'
 import BankPanel from './BankPanel'
 import FuturesPanel from './FuturesPanel'
 import MessageLog from './MessageLog'
+import Calendar from './Calendar'
 
 export default function GameBoard() {
   const {
@@ -15,6 +16,7 @@ export default function GameBoard() {
     gamePhase,
     roomCode,
     currentTurn,
+    gameDate,
     mode,
     targetAssets,
     winnerId,
@@ -44,6 +46,7 @@ export default function GameBoard() {
             )}
           </div>
           <div className="flex items-center gap-3">
+            <Calendar date={gameDate} />
             <span className="text-gray-400 text-xs">回合: {currentTurn}</span>
             <div className="flex items-center gap-1.5">
               <div className="w-3 h-3 rounded-full" style={{ backgroundColor: currentPlayer?.color }} />
@@ -132,7 +135,7 @@ export default function GameBoard() {
       </div>
 
       {/* 底部悬浮按钮栏 */}
-      <div className="flex-shrink-0 mt-2 grid grid-cols-5 gap-1">
+      <div className="flex-shrink-0 mt-2 grid grid-cols-6 gap-1">
         <StockPanel />
         <FuturesPanel />
         <BankPanel />

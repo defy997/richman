@@ -16,7 +16,6 @@ const CARDS: CardInfo[] = [
   { name: '均贫卡', price: 100, desc: '所有玩家现金取平均值', icon: '⚖️', color: 'from-yellow-600 to-yellow-800' },
   { name: '红心卡', price: 60, desc: '指定股票连续上涨 3 天', icon: '❤️', color: 'from-pink-600 to-pink-800' },
   { name: '黑心卡', price: 80, desc: '指定股票连续下跌 4 天', icon: '🖤', color: 'from-gray-700 to-gray-900' },
-  { name: '占地卡', price: 120, desc: '随机占领一块空地', icon: '🏴', color: 'from-orange-600 to-orange-800' },
   { name: '地皮升级卡', price: 60, desc: '自动升级一块地皮', icon: '⬆️', color: 'from-green-600 to-green-800' }
 ]
 
@@ -174,7 +173,7 @@ export default function CardPanel() {
                       ((selectedCard.name === '红心卡' || selectedCard.name === '黑心卡') && !targetValue)
                     }
                     className={`w-full py-3 rounded-lg font-bold transition-all ${
-                      (selectedCard.name === '停留卡' || selectedCard.name === '均贫卡' || selectedCard.name === '占地卡' || selectedCard.name === '地皮升级卡' || targetValue)
+                      (selectedCard.name === '停留卡' || selectedCard.name === '均贫卡' || selectedCard.name === '地皮升级卡' || targetValue)
                         ? 'bg-accent hover:bg-red-600 text-white cursor-pointer'
                         : 'bg-gray-700 text-gray-500 cursor-not-allowed'
                     }`}
