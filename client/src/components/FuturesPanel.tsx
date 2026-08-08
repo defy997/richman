@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useMemo } from 'react'
 import { useGameStore } from '../store/gameStore'
 import { createPortal } from 'react-dom'
 import ReactECharts from 'echarts-for-react'
@@ -99,6 +99,12 @@ export default function FuturesPanel() {
   const typeIcon = selected?.type === 'gold' ? '🥇' : selected?.type === 'silver' ? '🥈' : '💎'
   const typeColor = selected?.type === 'gold' ? 'from-yellow-500 to-yellow-700' : selected?.type === 'silver' ? 'from-gray-400 to-gray-600' : 'from-cyan-400 to-blue-600'
 
+  // 钻石期货价 × 数量
+  const diamondFut = futures.find(f => f.type === 'diamond')
+  const diamondUnitPrice = diamondFut ? diamondFut.price : 5000
+  const diamondCount = myPlayer?.diamonds || 0
+  const diamondValue = diamondCount * diamondUnitPrice
+
   return (
     <>
       <div className="p-3">
@@ -113,9 +119,12 @@ export default function FuturesPanel() {
             </div>
             <span className="text-gray-400 text-xs">点击展开 →</span>
           </div>
-          <div className="mt-1 flex items-center gap-2">
-            <span className="text-xs text-yellow-400">💎 {myPlayer?.diamonds || 0}</span>
-            <span className="text-xs text-gray-500">存款: ${myPlayer?.deposit.toLocaleString()}</span>
+          <div className="mt-1 flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-yellow-400">💎 {diamondCount}</span>
+              <span className="text-xs text-gray-500">存款: ${myPlayer?.deposit.toLocaleString()}</span>
+            </div>
+            <span className="text-[10px] text-gray-400">💎 ≈ ${Math.round(diamondValue).toLocaleString()}</span>
           </div>
         </div>
       </div>

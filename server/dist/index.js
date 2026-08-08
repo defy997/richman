@@ -1738,7 +1738,7 @@ io.on('connection', (socket) => {
         }
         const cardPrices = {
             '停留卡': 40, '骰子卡': 30, '均贫卡': 100,
-            '红心卡': 60, '黑心卡': 80, '地皮升级卡': 60
+            '红心卡': 60, '黑心卡': 80, '占地卡': 120, '地皮升级卡': 60
         };
         const price = cardPrices[cardName];
         if (!price) {
@@ -1839,6 +1839,22 @@ io.on('connection', (socket) => {
                 upgradeableProp.level++;
                 upgradeableProp.price = Math.floor(upgradeableProp.basePrice * (1 + upgradeableProp.level * 0.5));
                 sendMessage(currentRoom, 'success', `${currentPlayer.name} 使用地皮升级卡，${upgradeableProp.name} 升级到 Lv.${upgradeableProp.level}`);
+                break;
+            }
+            case '占地卡': {
+                // 随机挑选一块无人拥有的地皮，归当前玩家所有
+                const emptyCells = currentRoom.cells.filter(c => c.type === 'empty' && !c.owner);
+                if (emptyCells.length === 0) {
+                    socket.emit('error', { message: '没有空地可占领' });
+                    currentPlayer.cards.push(cardName);
+                    return;
+                }
+                const targetCell = emptyCells[Math.floor(Math.random() * emptyCells.length)];
+                targetCell.owner = currentPlayer.id;
+                if (!currentPlayer.properties.includes(targetCell.id)) {
+                    currentPlayer.properties.push(targetCell.id);
+                }
+                sendMessage(currentRoom, 'warning', `${currentPlayer.name} 使用占地卡，白嫖了 ${targetCell.name}！`);
                 break;
             }
         }

@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useMemo } from 'react'
 import { useGameStore } from '../store/gameStore'
 import { createPortal } from 'react-dom'
 
@@ -16,11 +16,12 @@ const CARDS: CardInfo[] = [
   { name: '均贫卡', price: 100, desc: '所有玩家现金取平均值', icon: '⚖️', color: 'from-yellow-600 to-yellow-800' },
   { name: '红心卡', price: 60, desc: '指定股票连续上涨 3 天', icon: '❤️', color: 'from-pink-600 to-pink-800' },
   { name: '黑心卡', price: 80, desc: '指定股票连续下跌 4 天', icon: '🖤', color: 'from-gray-700 to-gray-900' },
+  { name: '占地卡', price: 120, desc: '随机占领一块无人地皮', icon: '🚩', color: 'from-red-600 to-red-800' },
   { name: '地皮升级卡', price: 60, desc: '自动升级一块地皮', icon: '⬆️', color: 'from-green-600 to-green-800' }
 ]
 
 export default function CardPanel() {
-  const { socket, myPlayerId, players, stocks } = useGameStore()
+  const { socket, myPlayerId, players, stocks, futures } = useGameStore()
   const [isOpen, setIsOpen] = useState(false)
   const [selectedCard, setSelectedCard] = useState<CardInfo | null>(null)
   const [targetValue, setTargetValue] = useState('')
@@ -29,6 +30,14 @@ export default function CardPanel() {
   const myCards = myPlayer?.cards || []
   const currentPlayerIndex = useGameStore(s => s.currentPlayerIndex)
   const isMyTurn = players[currentPlayerIndex]?.id === myPlayerId
+
+  // 钻石期货价 × 数量
+  const diamondPrice = useMemo(() => {
+    const f = futures.find(x => x.type === 'diamond')
+    return f ? f.price : 5000
+  }, [futures])
+  const diamondCount = myPlayer?.diamonds || 0
+  const diamondValue = diamondCount * diamondPrice
 
   const handleBuyCard = (cardName: string) => {
     socket?.emit('buyCard', { cardName })
@@ -62,7 +71,10 @@ export default function CardPanel() {
               <span className="text-xl">🎴</span>
               <span className="text-sm font-bold">卡片</span>
             </div>
-            <span className="text-xs text-yellow-400">💎 {myPlayer?.diamonds || 0}</span>
+            <div className="text-right">
+              <div className="text-xs text-yellow-400">💎 {diamondCount}</div>
+              <div className="text-[10px] text-gray-400">≈ ${Math.round(diamondValue).toLocaleString()}</div>
+            </div>
           </div>
           {myCards.length > 0 && (
             <div className="mt-1 text-xs text-gray-400">
@@ -86,7 +98,10 @@ export default function CardPanel() {
               <div className="flex items-center gap-2">
                 <span className="text-xl">🎴</span>
                 <span className="text-sm font-bold">卡片售卖机</span>
-                <span className="text-xs text-yellow-400">💎 {myPlayer?.diamonds || 0}</span>
+                <div className="text-right">
+                  <div className="text-xs text-yellow-400">💎 {diamondCount}</div>
+                  <div className="text-[10px] text-gray-400">≈ ${Math.round(diamondValue).toLocaleString()}</div>
+                </div>
               </div>
               <button onClick={() => setIsOpen(false)} className="w-8 h-8 rounded-full bg-gray-700 hover:bg-gray-600 text-gray-300 flex items-center justify-center text-lg">×</button>
             </div>

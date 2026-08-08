@@ -2148,6 +2148,23 @@ io.on('connection', (socket) => {
         sendMessage(currentRoom, 'success', `${currentPlayer.name} 使用地皮升级卡，${upgradeableProp.name} 升级到 Lv.${upgradeableProp.level}`)
         break
       }
+
+      case '占地卡': {
+        // 随机挑选一块无人拥有的地皮，归当前玩家所有
+        const emptyCells = currentRoom.cells.filter(c => c.type === 'empty' && !c.owner)
+        if (emptyCells.length === 0) {
+          socket.emit('error', { message: '没有空地可占领' })
+          currentPlayer.cards.push(cardName)
+          return
+        }
+        const targetCell = emptyCells[Math.floor(Math.random() * emptyCells.length)]
+        targetCell.owner = currentPlayer.id
+        if (!currentPlayer.properties.includes(targetCell.id)) {
+          currentPlayer.properties.push(targetCell.id)
+        }
+        sendMessage(currentRoom, 'warning', `${currentPlayer.name} 使用占地卡，白嫖了 ${targetCell.name}！`)
+        break
+      }
     }
 
     broadcastRoomState(currentRoom)
