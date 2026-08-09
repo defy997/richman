@@ -14,10 +14,12 @@ const CARDS: CardInfo[] = [
   { name: '停留卡', price: 40, desc: '让下一个玩家停留一回合', icon: '⏸️', color: 'from-blue-600 to-blue-800' },
   { name: '骰子卡', price: 30, desc: '指定下一次骰子点数 (1-6)', icon: '🎲', color: 'from-purple-600 to-purple-800' },
   { name: '均贫卡', price: 100, desc: '所有玩家现金取平均值', icon: '⚖️', color: 'from-yellow-600 to-yellow-800' },
-  { name: '红心卡', price: 60, desc: '指定股票连续上涨 3 天', icon: '❤️', color: 'from-pink-600 to-pink-800' },
-  { name: '黑心卡', price: 80, desc: '指定股票连续下跌 4 天', icon: '🖤', color: 'from-gray-700 to-gray-900' },
+  { name: '红心卡', price: 60, desc: '指定股票/期货 散户/机构/游资/量化 看多倾向 +25% (4天)', icon: '❤️', color: 'from-pink-600 to-pink-800' },
+  { name: '黑心卡', price: 80, desc: '指定股票/期货 散户/机构/游资/量化 看空倾向 +30% (5天)', icon: '🖤', color: 'from-gray-700 to-gray-900' },
   { name: '占地卡', price: 120, desc: '随机占领一块无人地皮', icon: '🚩', color: 'from-red-600 to-red-800' },
-  { name: '地皮升级卡', price: 60, desc: '自动升级一块地皮', icon: '⬆️', color: 'from-green-600 to-green-800' }
+  { name: '地皮升级卡', price: 60, desc: '自动升级一块地皮', icon: '⬆️', color: 'from-green-600 to-green-800' },
+  { name: '护盾卡', price: 100, desc: '让自己持仓的股票/期货在下次被卡牌影响时免疫', icon: '🛡️', color: 'from-cyan-600 to-cyan-800' },
+  { name: '谣言卡', price: 50, desc: '对股票/期货散布利好/利空消息（仅在交易所或有同花顺可看）', icon: '📢', color: 'from-yellow-700 to-amber-900' }
 ]
 
 export default function CardPanel() {
@@ -25,6 +27,7 @@ export default function CardPanel() {
   const [isOpen, setIsOpen] = useState(false)
   const [selectedCard, setSelectedCard] = useState<CardInfo | null>(null)
   const [targetValue, setTargetValue] = useState('')
+  const [rumorDirection, setRumorDirection] = useState<'good' | 'bad' | null>(null)
 
   const myPlayer = players.find(p => p.id === myPlayerId)
   const myCards = myPlayer?.cards || []
@@ -49,14 +52,19 @@ export default function CardPanel() {
       const n = parseInt(targetValue)
       if (n < 1 || n > 6) return
       socket?.emit('useCard', { cardName: selectedCard.name, target: n })
-    } else if (selectedCard.name === '红心卡' || selectedCard.name === '黑心卡') {
+    } else if (selectedCard.name === '红心卡' || selectedCard.name === '黑心卡' ||
+               selectedCard.name === '护盾卡') {
       if (!targetValue) return
       socket?.emit('useCard', { cardName: selectedCard.name, target: targetValue })
+    } else if (selectedCard.name === '谣言卡') {
+      if (!targetValue || !rumorDirection) return
+      socket?.emit('useCard', { cardName: selectedCard.name, target: `${targetValue}:${rumorDirection}` })
     } else {
       socket?.emit('useCard', { cardName: selectedCard.name })
     }
     setSelectedCard(null)
     setTargetValue('')
+    setRumorDirection(null)
   }
 
   return (
@@ -117,7 +125,7 @@ export default function CardPanel() {
                         <button
                           key={idx}
                           type="button"
-                          onClick={() => { setSelectedCard(card || null); setTargetValue('') }}
+                          onClick={() => { setSelectedCard(card || null); setTargetValue(''); setRumorDirection(null) }}
                           className={`
                             px-3 py-2 rounded-lg text-xs font-bold border-2
                             ${selectedCard?.name === cardName
@@ -160,9 +168,13 @@ export default function CardPanel() {
                     </div>
                   )}
 
-                  {(selectedCard.name === '红心卡' || selectedCard.name === '黑心卡') && (
+                  {(selectedCard.name === '红心卡' || selectedCard.name === '黑心卡' ||
+                    selectedCard.name === '护盾卡') && (
                     <div>
-                      <div className="text-xs text-gray-400 mb-2">选择股票代码</div>
+                      <div className="text-xs text-gray-400 mb-2">选择股票（不支持期货）</div>
+                      <div className="text-[10px] text-gray-500 mb-2">
+                        {selectedCard.name === '护盾卡' && '⚠️ 仅可选择自己已持仓的目标'}
+                      </div>
                       <div className="grid grid-cols-4 gap-1">
                         {stocks.map(s => (
                           <button
@@ -180,15 +192,81 @@ export default function CardPanel() {
                     </div>
                   )}
 
+                  {selectedCard.name === '谣言卡' && (
+                    <div>
+                      <div className="text-xs text-gray-400 mb-2">第 1 步：选择股票</div>
+                      <div className="text-[10px] text-yellow-500 mb-2">
+                        📢 散布该股票的利好/利空消息，引诱其他玩家交易（不支持期货）
+                      </div>
+                      <div className="grid grid-cols-4 gap-1 mb-4">
+                        {stocks.map(s => (
+                          <button
+                            key={s.symbol}
+                            type="button"
+                            onClick={() => setTargetValue(s.symbol)}
+                            className={`py-2 text-xs rounded ${
+                              targetValue === s.symbol ? 'bg-accent text-white' : 'bg-gray-700 hover:bg-gray-600'
+                            }`}
+                          >
+                            {s.symbol} {s.name}
+                          </button>
+                        ))}
+                      </div>
+
+                      {targetValue && (
+                        <>
+                          <div className="text-xs text-gray-400 mb-2">第 2 步：选择消息方向</div>
+                          <div className="grid grid-cols-2 gap-2">
+                            <button
+                              type="button"
+                              onClick={() => setRumorDirection('good')}
+                              className={`py-3 rounded-lg text-sm font-bold transition-all ${
+                                rumorDirection === 'good'
+                                  ? 'bg-gradient-to-br from-green-600 to-green-800 ring-2 ring-white text-white'
+                                  : 'bg-gray-700 hover:bg-gray-600 text-gray-300'
+                              }`}
+                            >
+                              🟢 散布利好
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setRumorDirection('bad')}
+                              className={`py-3 rounded-lg text-sm font-bold transition-all ${
+                                rumorDirection === 'bad'
+                                  ? 'bg-gradient-to-br from-red-600 to-red-800 ring-2 ring-white text-white'
+                                  : 'bg-gray-700 hover:bg-gray-600 text-gray-300'
+                              }`}
+                            >
+                              🔴 散布利空
+                            </button>
+                          </div>
+                          <div className="text-[10px] text-gray-500 mt-2 italic">
+                            ⚠️ 消息内容仅在股票/期货交易所或购买同花顺软件可查看
+                          </div>
+                        </>
+                      )}
+                    </div>
+                  )}
+
                   <button
                     type="button"
                     onClick={handleUseCard}
-                    disabled={
-                      (selectedCard.name === '骰子卡' && !targetValue) ||
-                      ((selectedCard.name === '红心卡' || selectedCard.name === '黑心卡') && !targetValue)
-                    }
+                    disabled={(() => {
+                      if (selectedCard.name === '骰子卡') return !targetValue
+                      if (selectedCard.name === '红心卡' || selectedCard.name === '黑心卡' ||
+                          selectedCard.name === '护盾卡') return !targetValue
+                      if (selectedCard.name === '谣言卡') return !targetValue || !rumorDirection
+                      return false
+                    })()}
                     className={`w-full py-3 rounded-lg font-bold transition-all ${
-                      (selectedCard.name === '停留卡' || selectedCard.name === '均贫卡' || selectedCard.name === '地皮升级卡' || targetValue)
+                      (() => {
+                        if (selectedCard.name === '停留卡' || selectedCard.name === '均贫卡' ||
+                            selectedCard.name === '地皮升级卡' || selectedCard.name === '占地卡') {
+                          return true
+                        }
+                        if (selectedCard.name === '谣言卡') return !!targetValue && !!rumorDirection
+                        return !!targetValue || (selectedCard.name === '骰子卡' && !!targetValue)
+                      })()
                         ? 'bg-accent hover:bg-red-600 text-white cursor-pointer'
                         : 'bg-gray-700 text-gray-500 cursor-not-allowed'
                     }`}

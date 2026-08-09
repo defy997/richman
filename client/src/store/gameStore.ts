@@ -9,6 +9,18 @@ export interface Loan {
   createdAt: number
 }
 
+// 建材库存
+export interface Materials {
+  cement: number
+  steel: number
+  rubber: number
+  preciousMetals: number
+  diamonds: number
+}
+
+// 地皮特殊升级类型
+export type PropertyUpgrade = 'normal' | 'hotel' | 'smelter' | 'diamondMine' | 'agency' | 'resort' | 'mall' | 'monument'
+
 export interface Player {
   id: string
   name: string
@@ -28,6 +40,16 @@ export interface Player {
   isAI?: boolean
   aiDifficulty?: 'easy' | 'normal' | 'hard'
   totalAssets?: number
+  // 建材库存
+  materials: Materials
+  // 同花顺软件
+  hasTonghuashun: boolean
+  // 是否在股票交易所
+  atStockExchange: boolean
+  // 是否在期货交易所
+  atFuturesExchange: boolean
+  // 吸引力：地标经济核心资源（来源于地标建筑、期货交易所等）
+  attraction: number
 }
 
 export interface StockHolding {
@@ -42,13 +64,23 @@ export interface StockHolding {
 
 export interface Cell {
   id: number
-  type: 'empty' | 'chance' | 'destiny' | 'diamond' | 'start' | 'bank' | 'stock' | 'futures'
+  type: 'empty' | 'chance' | 'destiny' | 'diamond' | 'start' | 'bank' | 'stock' | 'futures' | 'realestate'
   name: string
   price?: number
   owner?: string | null
   level: number
   basePrice: number
   visitCount?: number
+  upgrade?: PropertyUpgrade
+  // 拍卖地皮标记：永久免过路费；升级费用/建材减半；可直接升级无次数限制
+  fromAuction?: boolean
+  // 拍卖相关字段
+  auctionActive?: boolean
+  auctionReservedPrice?: number
+  auctionHighestBid?: number
+  auctionHighestBidder?: string | null
+  // 增值系数：每次收过路费 +2%，封顶 200%
+  appreciation?: number
 }
 
 export interface KLine {
@@ -67,6 +99,11 @@ export interface Stock {
   change: number
   trend?: 'up' | 'down'
   trendDays?: number
+  // 红心/黑心卡效果：-1 ~ +1，0 = 无效果
+  cardBias?: number
+  cardBiasDays?: number
+  cardBiasLastUsedTurn?: number
+  cardBiasShield?: boolean
   news?: string
   limitUp?: boolean
   limitDown?: boolean
@@ -103,6 +140,11 @@ export interface FuturesHolding {
   shortAvgCost: number
   shortInitialMargin: number
   shortMaintenanceMargin: number
+  longLeverage: number
+  shortLeverage: number
+  longFrozenCost: number
+  longOpenedOnDay: number
+  shortOpenedOnDay: number
 }
 
 export interface FuturesContract {
@@ -113,6 +155,7 @@ export interface FuturesContract {
   unit: number
   // 高级模拟字段
   base: number
+  volatility: number
   history: KLine[]
   volumes: number[]
   eventEffect: number
@@ -122,6 +165,11 @@ export interface FuturesContract {
   isConsolidating: boolean
   isNoManipulator: boolean
   noManipulatorDays: number
+  // 红心/黑心卡效果
+  cardBias?: number
+  cardBiasDays?: number
+  cardBiasLastUsedTurn?: number
+  cardBiasShield?: boolean
   open: number
   high: number
   low: number
@@ -130,7 +178,14 @@ export interface FuturesContract {
   ma10?: (number | null)[]
   ma20?: (number | null)[]
   news?: string
-  type: 'gold' | 'silver' | 'diamond'
+  type: 'gold' | 'silver' | 'diamond' | 'cement' | 'steel' | 'rubber' | 'oil' | 'wheat'
+  category: 'precious' | 'material' | 'energy' | 'agriculture'
+  isMaterial: boolean
+  limitThreshold: number
+  limitUp: boolean
+  limitDown: boolean
+  expiresInDays: number
+  expiresOnDay: number
 }
 
 export interface GameMessage {
@@ -146,6 +201,7 @@ export interface GameState {
   roomCode: string
   mode: GameMode
   targetAssets: number
+  maxPlayers: number
   winnerId: string | null
   players: Player[]
   cells: Cell[]
@@ -164,11 +220,13 @@ export interface GameState {
 interface GameStore extends GameState {
   socket: any
   myPlayerId: string | null
+  rumorReport: RumorReport | null
 
   setSocket: (socket: any) => void
   setMyPlayerId: (id: string | null) => void
   updateGameState: (state: Partial<GameState>) => void
   addMessage: (type: GameMessage['type'], content: string) => void
+  setRumorReport: (report: RumorReport | null) => void
   reset: () => void
 }
 
@@ -176,6 +234,7 @@ const initialState: GameState = {
   roomCode: '',
   mode: 'multiplayer',
   targetAssets: 0,
+  maxPlayers: 6,
   winnerId: null,
   players: [],
   cells: [],
@@ -195,6 +254,7 @@ export const useGameStore = create<GameStore>((set) => ({
   ...initialState,
   socket: null,
   myPlayerId: null,
+  rumorReport: null,
 
   setSocket: (socket) => set({ socket }),
   setMyPlayerId: (id) => set({ myPlayerId: id }),
@@ -215,5 +275,18 @@ export const useGameStore = create<GameStore>((set) => ({
     }))
   },
 
-  reset: () => set({ ...initialState, socket: null, myPlayerId: null })
+  setRumorReport: (report) => set({ rumorReport: report }),
+
+  reset: () => set({ ...initialState, socket: null, myPlayerId: null, rumorReport: null })
 }))
+
+// 谣言卡报告数据：玩家散布的利好/利空消息详情
+export interface RumorReport {
+  targetSymbol: string
+  targetName: string
+  targetType: '股票' | '期货'
+  direction: 'good' | 'bad'
+  eventDays: number
+  newsContent: string
+  hint: string
+}

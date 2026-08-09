@@ -45,22 +45,38 @@ export default function PlayerInfo() {
     })
     stockValue = longValue
 
-    // 期货持仓价值
+    // 期货持仓价值（按合约 unit × 价格 × 手数）
     let futuresValue = 0
     const myFutures = myPlayer.futuresHoldings || []
     myFutures.forEach(h => {
       const f = futures.find(x => x.symbol === h.symbol)
       if (!f) return
-      if (h.longQuantity > 0) futuresValue += f.price * h.longQuantity
+      if (h.longQuantity > 0) futuresValue += f.price * (f.unit || 1) * h.longQuantity
       // 做空为负债,不计入资产
     })
 
-    // 地产价值
+    // 建材库存价值（按当前建材期货市场价折算 - 实时浮动盈亏）
+    const materials = myPlayer.materials || { cement: 0, steel: 0, rubber: 0, preciousMetals: 0 }
+    const cementF = futures.find(x => x.type === 'cement')
+    const steelF = futures.find(x => x.type === 'steel')
+    const rubberF = futures.find(x => x.type === 'rubber')
+    const goldF = futures.find(x => x.type === 'gold')
+    const cementPrice = cementF?.price || 100
+    const steelPrice = steelF?.price || 200
+    const rubberPrice = rubberF?.price || 300
+    const goldPrice = goldF?.price || 1500
+    const materialsValue = cementPrice * materials.cement + steelPrice * materials.steel + rubberPrice * materials.rubber + goldPrice * materials.preciousMetals
+
+    // 地产价值（含酒店 buff 与拍卖地皮加成）
     let propertyValue = 0
+    let auctionCount = 0
     myPlayer.properties.forEach(cellId => {
       const cell = cells[cellId]
       if (cell) {
-        propertyValue += cell.basePrice * (1 + (cell.level || 0) * 0.5)
+        let val = cell.basePrice * (1 + (cell.level || 0) * 0.5)
+        if (cell.upgrade === 'hotel') val *= 1.1
+        if ((cell as any).fromAuction) { val *= 1.5; auctionCount++ }
+        propertyValue += val
       }
     })
 
@@ -71,12 +87,15 @@ export default function PlayerInfo() {
       return sum + l.amount + interest
     }, 0)
 
-    const total = cash + deposit + diamondsValue + stockValue + futuresValue + propertyValue - loanDebt
+    const total = cash + deposit + diamondsValue + stockValue + futuresValue + materialsValue + propertyValue - loanDebt
 
     return {
       cash, deposit, diamondsValue, diamonds: myPlayer.diamonds, diamondPrice,
-      stockValue, longValue, shortValue, futuresValue, propertyValue,
-      loanDebt, myStocks, myFutures, total
+      stockValue, longValue, shortValue, futuresValue, materialsValue,
+      auctionCount, propertyValue,
+      cementPrice, steelPrice, rubberPrice, goldPrice,
+      loanDebt, myStocks, myFutures, total,
+      materials: myPlayer.materials || { cement: 0, steel: 0, rubber: 0, preciousMetals: 0 }
     }
   }, [myPlayer, stocks, cells, futures, diamondPrice])
 
@@ -113,6 +132,10 @@ export default function PlayerInfo() {
               <span className="text-yellow-300 font-bold">${Math.round(assetDetails.diamondsValue).toLocaleString()}</span>
             </div>
             <div className="flex justify-between">
+              <span className="text-gray-400">✨ 吸引力</span>
+              <span className="text-pink-300 font-bold">{(myPlayer.attraction || 0).toLocaleString()}</span>
+            </div>
+            <div className="flex justify-between">
               <span className="text-gray-400">📈 股票 × {assetDetails.myStocks.length}</span>
               <span className="text-cyan-400 font-bold">${Math.round(assetDetails.stockValue).toLocaleString()}</span>
             </div>
@@ -129,9 +152,21 @@ export default function PlayerInfo() {
               </div>
             )}
             <div className="flex justify-between">
-              <span className="text-gray-400">🏘️ 地产 × {myPlayer.properties.length}</span>
+              <span className="text-gray-400">🏘️ 地产 × {myPlayer.properties.length}{assetDetails.auctionCount > 0 ? `（含${assetDetails.auctionCount}拍卖🏷️）` : ''}</span>
               <span className="text-green-300 font-bold">${Math.round(assetDetails.propertyValue).toLocaleString()}</span>
             </div>
+            {/* 建材库存（按期货市场价计算） */}
+            {(assetDetails.materials.cement > 0 || assetDetails.materials.steel > 0 || assetDetails.materials.rubber > 0 || assetDetails.materials.preciousMetals > 0) && (
+              <div className="flex justify-between text-[10px] bg-stone-900/30 rounded px-1 py-0.5">
+                <span className="text-gray-400">
+                  🧱水泥{assetDetails.materials.cement}@${assetDetails.cementPrice.toFixed(0)}
+                  {' '}钢{assetDetails.materials.steel}@${assetDetails.steelPrice.toFixed(0)}
+                  {' '}胶{assetDetails.materials.rubber}@${assetDetails.rubberPrice.toFixed(0)}
+                  {assetDetails.materials.preciousMetals > 0 && ` 🥇${assetDetails.materials.preciousMetals}@$${assetDetails.goldPrice.toFixed(0)}`}
+                </span>
+                <span className="text-stone-300 font-bold">${Math.round(assetDetails.materialsValue).toLocaleString()}</span>
+              </div>
+            )}
             {assetDetails.loanDebt > 0 && (
               <div className="flex justify-between">
                 <span className="text-gray-400">💳 贷款</span>

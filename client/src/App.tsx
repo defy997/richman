@@ -6,7 +6,7 @@ import GameBoard from './components/GameBoard'
 import './App.css'
 
 function App() {
-  const { gamePhase, socket, setSocket, setMyPlayerId, updateGameState, addMessage } = useGameStore()
+  const { gamePhase, socket, setSocket, setMyPlayerId, updateGameState, addMessage, setRumorReport } = useGameStore()
 
   useEffect(() => {
     const newSocket: Socket = io()
@@ -43,6 +43,11 @@ function App() {
     newSocket.on('roomJoined', ({ playerId }: { roomCode: string; playerId: string }) => {
       console.log('roomJoined, playerId:', playerId)
       setMyPlayerId(playerId)
+    })
+
+    // 谣言卡报告：仅推送给当前玩家本人
+    newSocket.on('rumorReport', (report: any) => {
+      setRumorReport(report)
     })
 
     return () => {

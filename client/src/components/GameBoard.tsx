@@ -8,6 +8,8 @@ import BankPanel from './BankPanel'
 import FuturesPanel from './FuturesPanel'
 import MessageLog from './MessageLog'
 import Calendar from './Calendar'
+import RealEstatePanel from './RealEstatePanel'
+import RumorReportModal, { useRumorReport } from './RumorReportModal'
 
 export default function GameBoard() {
   const {
@@ -25,6 +27,7 @@ export default function GameBoard() {
 
   const currentPlayer = players[currentPlayerIndex]
   const isMyTurn = currentPlayer?.id === myPlayerId
+  const { rumorReport, closeRumorReport } = useRumorReport()
   const myPlayer = players.find(p => p.id === myPlayerId)
   const myAssets = myPlayer?.totalAssets ?? 0
   const progressPercent = mode === 'singleplayer' && targetAssets > 0
@@ -46,13 +49,15 @@ export default function GameBoard() {
             )}
           </div>
           <div className="flex items-center gap-3">
-            <Calendar date={gameDate} />
             <span className="text-gray-400 text-xs">回合: {currentTurn}</span>
             <div className="flex items-center gap-1.5">
               <div className="w-3 h-3 rounded-full" style={{ backgroundColor: currentPlayer?.color }} />
               <span className={`text-xs ${isMyTurn ? 'text-gold font-bold' : 'text-gray-300'}`}>
                 {currentPlayer?.name}{currentPlayer?.isAI && ' 🤖'}{isMyTurn && ' (你)'}
               </span>
+              {currentPlayer?.hasTonghuashun && (
+                <span className="text-[10px] bg-blue-600 text-white px-1 py-0.5 rounded" title="已装备同花顺软件">📱</span>
+              )}
             </div>
             {isMyTurn && (
               <span className="px-2 py-0.5 bg-accent rounded text-xs font-bold animate-pulse">你的回合</span>
@@ -64,9 +69,9 @@ export default function GameBoard() {
         {mode === 'singleplayer' && targetAssets > 0 && (
           <div className="mt-1">
             <div className="flex items-center justify-between text-xs mb-0.5">
-              <span className="text-gray-400">目标进度</span>
+              <span className="text-gray-400">目标进度 (1亿富翁)</span>
               <span className="text-gold font-bold">
-                ${myAssets.toLocaleString()} / ${targetAssets.toLocaleString()} ({progressPercent.toFixed(1)}%)
+                ${myAssets.toLocaleString()} / ${targetAssets.toLocaleString()} ({progressPercent.toFixed(2)}%)
               </span>
             </div>
             <div className="w-full bg-primary rounded-full h-2 overflow-hidden">
@@ -79,12 +84,17 @@ export default function GameBoard() {
         )}
       </header>
 
+      {/* 谣言卡报告弹窗（仅当前玩家可见） */}
+      {rumorReport && (
+        <RumorReportModal report={rumorReport} onClose={closeRumorReport} />
+      )}
+
       {/* 胜利弹窗 */}
       {isWinner && (
         <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-[100]">
           <div className="bg-secondary rounded-2xl p-8 max-w-md text-center border-2 border-gold shadow-2xl">
             <div className="text-6xl mb-4">🎉</div>
-            <h2 className="text-3xl font-bold text-gold mb-4">百万富翁达成！</h2>
+            <h2 className="text-3xl font-bold text-gold mb-4">亿万富翁达成！</h2>
             <p className="text-gray-300 mb-2">
               总资产: <span className="text-gold font-bold text-2xl">${myAssets.toLocaleString()}</span>
             </p>
@@ -106,7 +116,7 @@ export default function GameBoard() {
             <div className="text-4xl mb-4">😢</div>
             <h2 className="text-2xl font-bold text-accent mb-4">游戏结束</h2>
             <p className="text-gray-300 mb-4">
-              {mode === 'singleplayer' ? '未能达成百万富翁目标' : '本次对局结束'}
+              {mode === 'singleplayer' ? '未能达成亿万富翁目标' : '本次对局结束'}
             </p>
             <button
               onClick={() => window.location.reload()}
@@ -118,12 +128,26 @@ export default function GameBoard() {
         </div>
       )}
 
-      {/* 主内容区 */}
+      {/* 主内容区：左侧地图 + 中间日历+日志（垂直方向，与地图同高） + 右侧玩家信息 */}
       <div className="flex-1 flex gap-2 min-h-0">
         {/* 左侧：棋盘 */}
         <div className="flex-1 flex flex-col gap-2 min-w-0 overflow-auto">
-          <div className="flex-1 overflow-auto">
+          <div className="flex-1 overflow-auto" id="map-container">
             <Board />
+          </div>
+        </div>
+
+        {/* 中间：日历 + 日志（与地图平行 - 同高） */}
+        <div className="w-72 flex-shrink-0 flex flex-col gap-2">
+          <Calendar date={gameDate} />
+          <div className="bg-secondary rounded-xl p-2 flex-1 min-h-0 overflow-hidden flex flex-col">
+            <div className="text-sm font-bold mb-2 px-1 flex items-center justify-between">
+              <span>📜 游戏日志</span>
+              <span className="text-[10px] text-gray-500">滚轮查看历史</span>
+            </div>
+            <div className="flex-1 min-h-0 overflow-y-auto">
+              <MessageLog />
+            </div>
           </div>
         </div>
 
@@ -135,16 +159,12 @@ export default function GameBoard() {
       </div>
 
       {/* 底部悬浮按钮栏 */}
-      <div className="flex-shrink-0 mt-2 grid grid-cols-6 gap-1">
+      <div className="flex-shrink-0 mt-2 grid grid-cols-5 gap-1">
         <StockPanel />
         <FuturesPanel />
         <BankPanel />
+        <RealEstatePanel />
         <CardPanel />
-        <div className="p-3">
-          <div className="bg-primary rounded-lg p-2 h-full">
-            <MessageLog />
-          </div>
-        </div>
       </div>
     </div>
   )

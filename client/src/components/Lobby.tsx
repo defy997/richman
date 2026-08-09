@@ -10,8 +10,10 @@ export default function Lobby() {
   // 单人模式配置
   const [aiCount, setAiCount] = useState(3)
   const [difficulty, setDifficulty] = useState<'easy' | 'normal' | 'hard'>('normal')
+  // 联机配置：选择房间人数上限（2-6）
+  const [maxPlayers, setMaxPlayers] = useState(4)
 
-  const { socket, addMessage, players, roomCode: currentRoom } = useGameStore()
+  const { socket, addMessage, players, roomCode: currentRoom, maxPlayers: roomMaxPlayers } = useGameStore()
 
   const handleCreateRoom = () => {
     if (!playerName.trim()) {
@@ -19,7 +21,7 @@ export default function Lobby() {
       return
     }
     setMode('waiting-multiplayer')
-    socket?.emit('createRoom', { playerName: playerName.trim() })
+    socket?.emit('createRoom', { playerName: playerName.trim(), maxPlayers })
   }
 
   const handleJoinRoom = () => {
@@ -80,7 +82,13 @@ export default function Lobby() {
                 </div>
               ))}
               <div className="text-gray-500 text-sm mt-2">
-                {players.length < 6 ? `等待更多玩家加入... (${players.length}/6)` : '可以开始游戏了'}
+                {(() => {
+                  const max = roomMaxPlayers || 6
+                  const ready = players.length >= 2
+                  return ready
+                    ? `可以开始游戏了 (${players.length}/${max})`
+                    : `等待更多玩家加入... (${players.length}/${max})`
+                })()}
               </div>
             </div>
           </div>
@@ -135,7 +143,7 @@ export default function Lobby() {
         <div className="bg-secondary p-8 rounded-xl shadow-2xl max-w-md w-full mx-4">
           <h1 className="text-3xl font-bold text-center text-accent mb-2">单人模式</h1>
           <p className="text-center text-gray-400 mb-6">
-            目标：让总资产达到 <span className="text-gold font-bold">$1,000,000</span>
+            目标：让总资产达到 <span className="text-gold font-bold">$100,000,000</span>（1亿）
           </p>
 
           <div className="space-y-4">
@@ -210,7 +218,7 @@ export default function Lobby() {
               onClick={handleStartSingleplayer}
               className="w-full py-3 bg-gold hover:bg-yellow-500 text-primary font-bold rounded-lg transition-colors"
             >
-              开始挑战百万富翁
+              开始挑战亿万富翁
             </button>
 
             <button
@@ -243,6 +251,30 @@ export default function Lobby() {
                 className="w-full px-4 py-3 bg-primary border border-gray-700 rounded-lg focus:border-accent focus:outline-none transition-colors"
                 placeholder="输入名字..."
               />
+            </div>
+
+            <div>
+              <label className="block text-sm text-gray-400 mb-2">
+                房间人数上限 <span className="text-xs text-gray-500">（2-6 人）</span>
+              </label>
+              <div className="grid grid-cols-5 gap-2">
+                {[2, 3, 4, 5, 6].map(n => (
+                  <button
+                    key={n}
+                    onClick={() => setMaxPlayers(n)}
+                    className={`py-2 rounded-lg font-bold transition-colors ${
+                      maxPlayers === n
+                        ? 'bg-accent text-white'
+                        : 'bg-primary text-gray-400 hover:bg-gray-800'
+                    }`}
+                  >
+                    {n}人
+                  </button>
+                ))}
+              </div>
+              <div className="text-[10px] text-gray-500 mt-1">
+                当前选择：{maxPlayers} 人房间（房主 + {maxPlayers - 1} 位玩家）
+              </div>
             </div>
 
             <button
@@ -304,7 +336,7 @@ export default function Lobby() {
             className="w-full py-4 bg-gold hover:bg-yellow-500 text-primary font-bold rounded-lg transition-colors"
           >
             <div className="text-lg">🎯 单人模式</div>
-            <div className="text-xs opacity-75 mt-1">挑战百万富翁目标</div>
+            <div className="text-xs opacity-75 mt-1">挑战亿万富翁目标（1亿资产）</div>
           </button>
 
           <button

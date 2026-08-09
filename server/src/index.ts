@@ -112,6 +112,11 @@ interface Player {
     shortAvgCost: number
     shortInitialMargin: number
     shortMaintenanceMargin: number
+    longLeverage: number
+    shortLeverage: number
+    longFrozenCost: number
+    longOpenedOnDay: number
+    shortOpenedOnDay: number
   }[]
   // 贷款
   loans: Loan[]
@@ -123,6 +128,16 @@ interface Player {
   aiDifficulty?: 'easy' | 'normal' | 'hard'
   // 总资产
   totalAssets?: number
+  // 建材库存（升级房屋用）
+  materials: Materials
+  // 同花顺软件（永久道具，购买后可远程查看股票/期货利好利空）
+  hasTonghuashun: boolean
+  // 玩家是否站在股票交易所
+  atStockExchange: boolean
+  // 玩家是否站在期货交易所
+  atFuturesExchange: boolean
+  // 吸引力：地标经济核心资源（来源于地标建筑、期货交易所等）
+  attraction: number
 }
 
 interface Loan {
@@ -135,7 +150,7 @@ interface Loan {
 
 interface Cell {
   id: number
-  type: 'empty' | 'chance' | 'destiny' | 'diamond' | 'start' | 'bank' | 'stock' | 'futures'
+  type: 'empty' | 'chance' | 'destiny' | 'diamond' | 'start' | 'bank' | 'stock' | 'futures' | 'realestate'
   name: string
   price: number
   owner: string | null
@@ -143,6 +158,20 @@ interface Cell {
   basePrice: number
   // 玩家经过此地块的次数（用于判断是否可以升级）
   visitCount?: number
+  // 特殊升级类型
+  upgrade?: PropertyUpgrade
+  // 是否来自拍卖：永久免过路费；可减半升级
+  fromAuction?: boolean
+  // 拍卖底价（仅拍卖前有效）
+  auctionReservedPrice?: number
+  // 当前最高出价（拍卖中）
+  auctionHighestBid?: number
+  // 当前最高出价者
+  auctionHighestBidder?: string | null
+  // 是否正在拍卖
+  auctionActive?: boolean
+  // 增值系数：每次收过路费 +2%（= 0.02），封顶 200%（= 2.0），过路费 × (1 + appreciation)
+  appreciation?: number
 }
 
 interface Stock {
@@ -154,6 +183,14 @@ interface Stock {
   change: number
   trend: 'up' | 'down' | null
   trendDays: number
+  // 红心/黑心卡效果：-1 ~ +1，0 = 无效果。只影响散户/机构/游资/量化，不影响操盘手
+  cardBias: number
+  // 卡片效果剩余天数
+  cardBiasDays: number
+  // 卡片最近一次使用回合（用于 7 天冷却）
+  cardBiasLastUsedTurn: number
+  // 护盾标记：true 时下次被红/黑心卡牌影响时免疫并清零
+  cardBiasShield: boolean
   news?: string // 利好/利空消息
   limitUp?: boolean
   limitDown?: boolean
@@ -197,10 +234,19 @@ interface FuturesHolding {
   longAvgCost: number
   shortQuantity: number
   shortAvgCost: number
-  // 做空锁定的初始保证金
+  // 做空锁定的初始保证金（按杠杆计算）
   shortInitialMargin: number
   // 当前维持保证金要求（随价格变化更新）
   shortMaintenanceMargin: number
+  // 多头杠杆倍数
+  longLeverage: number
+  // 空头杠杆倍数
+  shortLeverage: number
+  // 多头已冻结资金（成本 × 杠杆系数）
+  longFrozenCost: number
+  // 多头开仓日期（用于 T+0 / 交割判断）
+  longOpenedOnDay: number
+  shortOpenedOnDay: number
 }
 
 interface FuturesContract {
@@ -214,6 +260,8 @@ interface FuturesContract {
   unit: number
   // 基础价值 (用于均值回归)
   base: number
+  // 波动率（每日最大波动幅度）
+  volatility: number
   // 历史K线（模拟股票）
   history: { open: number; high: number; low: number; close: number; volume: number }[]
   volumes: number[]
@@ -234,10 +282,28 @@ interface FuturesContract {
   isConsolidating: boolean
   isNoManipulator: boolean
   noManipulatorDays: number
+  // 红心/黑心卡效果：-1 ~ +1，0 = 无效果。只影响散户/机构/游资/量化，不影响操盘手
+  cardBias: number
+  cardBiasDays: number
+  cardBiasLastUsedTurn: number
+  cardBiasShield: boolean
   // 当前事件描述
   news?: string
   // 期货类型
-  type: 'gold' | 'silver' | 'diamond'
+  type: 'gold' | 'silver' | 'diamond' | 'cement' | 'steel' | 'rubber' | 'oil' | 'wheat'
+  // 期货类别（贵金属/建材/能源/农产品）
+  category: 'precious' | 'material' | 'energy' | 'agriculture'
+  // 是否可作为建材兑换
+  isMaterial: boolean
+  // 涨跌停阈值（单日最大涨跌幅 = volatility * 6）
+  limitThreshold: number
+  // 是否涨停/跌停
+  limitUp: boolean
+  limitDown: boolean
+  // 合约到期天数（从游戏开始计算，到期日可实物交割）
+  expiresInDays: number
+  // 总到期日（绝对值）
+  expiresOnDay: number
 }
 
 interface GameRoom {
@@ -254,6 +320,8 @@ interface GameRoom {
   forcedDice: number | null
   stayCurrentTurn: boolean
   targetAssets: number
+  // 联机房间最大人数（2-6），房主创建时设定
+  maxPlayers: number
   winnerId: string | null
   turnStartedAt: number
   // 游戏日：每完成一轮所有玩家行动后推进一天
@@ -266,7 +334,48 @@ const INITIAL_CASH = 50000
 const INITIAL_DEPOSIT = 50000
 const INITIAL_DIAMONDS = 100
 const START_BONUS = 1000
-const SINGLEPLAYER_TARGET = 1_000_000
+const SINGLEPLAYER_TARGET = 100_000_000  // 1亿
+
+// 建材库存（升级房屋使用）
+export interface Materials {
+  cement: number      // 水泥
+  steel: number       // 钢材
+  rubber: number      // 橡胶
+  preciousMetals: number // 贵金属（盎司）
+  diamonds: number    // 钻石（已有）
+}
+
+// 地皮特殊升级类型
+export type PropertyUpgrade = 'normal' | 'hotel' | 'smelter' | 'diamondMine' | 'agency' | 'resort' | 'mall' | 'monument'
+
+// 升级材料消耗
+const UPGRADE_MATERIAL_COST = {
+  1: { cement: 5, steel: 3, rubber: 1 },    // 1->2 房屋
+  2: { cement: 10, steel: 6, rubber: 2 },   // 2->3 大厦
+  3: { cement: 20, steel: 12, rubber: 4 },  // 3->4 顶级
+  // 顶级之后选择特殊升级
+}
+
+const SPECIAL_UPGRADE_COST = {
+  hotel:      { cement: 30, steel: 20, rubber: 5, preciousMetals: 0, cash: 5000,  attraction: 0 },
+  smelter:    { cement: 25, steel: 30, rubber: 5, preciousMetals: 10, cash: 8000, attraction: 0 },
+  diamondMine:{ cement: 20, steel: 40, rubber: 8, preciousMetals: 0, cash: 15000, attraction: 0 },
+  agency:     { cement: 15, steel: 10, rubber: 3, preciousMetals: 5, cash: 12000, attraction: 0 },
+  resort:     { cement: 25, steel: 15, rubber: 10, preciousMetals: 0, cash: 10000, attraction: 20 },
+  mall:       { cement: 30, steel: 25, rubber: 8, preciousMetals: 5, cash: 12000, attraction: 15 },
+  monument:   { cement: 40, steel: 30, rubber: 15, preciousMetals: 10, cash: 20000, attraction: 30 }
+}
+
+// 特殊升级每回合收益
+const SPECIAL_UPGRADE_INCOME = {
+  hotel:      { depositInterest: 0.05, description: '每回合按存款5%获得利息' },
+  smelter:    { preciousMetalsPerTurn: 1, description: '每回合获得1贵金属' },
+  diamondMine:{ diamondsPerTurn: 2, description: '每回合获得2钻石' },
+  agency:     { tollMultiplier: 2, description: '所有房产过路费翻倍' },
+  resort:     { cashPerTurn: 1000, description: '每回合获得 $1000 现金' },
+  mall:       { cashPerTurn: 500, diamondsPerTurn: 1, description: '每回合获得 $500 现金 + 1 💎' },
+  monument:   { attractionPerTurn: 5, description: '每回合获得 5 吸引力（地标建筑）' }
+}
 
 // 贷款利率和期限
 const LOAN_INTEREST_RATE = 0.05  // 月利率 5%（每30天5%）
@@ -327,7 +436,7 @@ function addFunds(player: Player, amount: number, target: 'cash' | 'deposit' | '
 
 const BANK_FEE_RATE = 0.01       // 1% 存款/取现手续费
 
-const TOTAL_CELLS = 60
+const TOTAL_CELLS = 64
 
 // ============ Game State ============
 const rooms = new Map<string, GameRoom>()
@@ -350,10 +459,19 @@ const STOCK_NAMES = [
   { name: '环保', sector: '基建', stocks: ['碧水源', '伟明环保', '瀚蓝环境', '上海环境'] }
 ]
 
-const FUTURES_NAMES: { name: string; type: 'gold' | 'silver' | 'diamond' }[] = [
-  { name: '黄金期货', type: 'gold' },
-  { name: '白银期货', type: 'silver' },
-  { name: '钻石期货', type: 'diamond' }
+const FUTURES_NAMES: { name: string; type: 'gold' | 'silver' | 'diamond' | 'cement' | 'steel' | 'rubber' | 'oil' | 'wheat'; category: 'precious' | 'material' | 'energy' | 'agriculture'; isMaterial: boolean }[] = [
+  // 贵金属（投资/冶炼场升级）
+  { name: '黄金期货', type: 'gold', category: 'precious', isMaterial: false },
+  { name: '白银期货', type: 'silver', category: 'precious', isMaterial: false },
+  { name: '钻石期货', type: 'diamond', category: 'precious', isMaterial: false },
+  // 建材（升级房屋）
+  { name: '水泥期货', type: 'cement', category: 'material', isMaterial: true },
+  { name: '钢材期货', type: 'steel', category: 'material', isMaterial: true },
+  { name: '橡胶期货', type: 'rubber', category: 'material', isMaterial: true },
+  // 能源（多元化）
+  { name: '原油期货', type: 'oil', category: 'energy', isMaterial: false },
+  // 农产品（多元化）
+  { name: '小麦期货', type: 'wheat', category: 'agriculture', isMaterial: false }
 ]
 
 const STOCK_NEWS = {
@@ -383,18 +501,18 @@ const AI_NAMES_EASY = ['小李', '阿强', '小王']
 const AI_NAMES_NORMAL = ['陈总', 'Lisa', 'Mark']
 const AI_NAMES_HARD = ['金融大鳄', '巴菲特', '索罗斯']
 
-// ============ Generate 60-cell square board ============
-// 方形布局：顶排(0-14) → 右列(15-29) → 底排(30-44) → 左列(45-59)
+// ============ Generate 64-cell square board ============
+// 方形布局：顶排(0-15) → 右列(16-31) → 底排(32-47) → 左列(48-63)
 // 起点在左上角(0)，顺时针
 function generateCells(): Cell[] {
-  // 特殊格位置（60格方形）
+  // 特殊格位置（64格方形）
   // 起点: 0
   // 银行: 5 (顶排中部)
-  // 股票交易所: 25 (右列中部)
-  // 期货交易所: 45 (左列中部)
-  // 钻石: 10, 20, 35, 50
-  // 机会: 3, 7, 12, 17, 22, 27, 32, 37, 42, 47, 52, 57
-  // 命运: 15, 30, 40, 55
+  // 股票交易所: 16 (右列起点 - 右上角)
+  // 期货交易所: 48 (左列起点 - 左下角)
+  // 钻石: 10, 21, 36, 52
+  // 机会: 3, 7, 11, 18, 23, 27, 33, 38, 42, 46, 53, 58
+  // 命运: 15, 25, 39, 55
 
   const special: Record<number, Cell['type']> = {}
   const cellTypes: Cell['type'][] = []
@@ -403,11 +521,12 @@ function generateCells(): Cell[] {
     let type: Cell['type'] = 'empty'
     if (i === 0) type = 'start'
     else if (i === 5) type = 'bank'
-    else if (i === 25) type = 'stock'
-    else if (i === 45) type = 'futures'
-    else if ([10, 20, 35, 50].includes(i)) type = 'diamond'
-    else if ([3, 7, 12, 17, 22, 27, 32, 37, 42, 47, 52, 57].includes(i)) type = 'chance'
-    else if ([15, 30, 40, 55].includes(i)) type = 'destiny'
+    else if (i === 16) type = 'stock'
+    else if (i === 48) type = 'futures'
+    else if (i === 32) type = 'realestate'
+    else if ([10, 21, 36, 52].includes(i)) type = 'diamond'
+    else if ([3, 7, 11, 18, 23, 27, 33, 38, 42, 46, 53, 58].includes(i)) type = 'chance'
+    else if ([15, 25, 39, 55].includes(i)) type = 'destiny'
     cellTypes.push(type)
   }
 
@@ -429,6 +548,9 @@ function generateCells(): Cell[] {
       case 'futures':
         name = '🛢️期货交易所'
         break
+      case 'realestate':
+        name = '🏛️房地产交易中心'
+        break
       case 'chance':
         name = '❓机会'
         break
@@ -445,12 +567,13 @@ function generateCells(): Cell[] {
           '滨海', '河东', '河西', '南开', '河北', '红桥', '东丽', '西青', '津南', '北辰',
           '武清', '静海', '宝坻', '宁河', '蓟县', '长安', '桥西', '新华', '裕华', '井陉',
           '浦东', '黄浦', '徐汇', '长宁', '静安', '普陀', '虹口', '杨浦', '闵行', '宝山',
-          '嘉定', '金山', '松江', '青浦', '奉贤', '崇明', '西湖', '滨江', '上城', '下城'
+          '嘉定', '金山', '松江', '青浦', '奉贤', '崇明', '西湖', '滨江', '上城', '下城',
+          '拱墅', '江干', '余杭', '萧山', '富阳', '临安'
         ]
         name = regionNames[i] || `地块${i}`
         // 价位：顶排和右列较贵
-        if (i >= 30 && i <= 44) basePrice = Math.floor(Math.random() * 800) + 600
-        else if (i >= 45 && i <= 59) basePrice = Math.floor(Math.random() * 1000) + 700
+        if (i >= 32 && i <= 47) basePrice = Math.floor(Math.random() * 800) + 600
+        else if (i >= 48 && i <= 63) basePrice = Math.floor(Math.random() * 1000) + 700
         else basePrice = Math.floor(Math.random() * 1500) + 1000
         price = basePrice
         break
@@ -577,16 +700,40 @@ function simulateMarketDay(stocks: Stock[]): void {
     const ma10 = movingAverage(s, 10)
     const fundamentalSignal = (s.base * s.eventEffect - lastClose) / Math.max(lastClose, 1)
 
-    // 散户：跟趋势 + 大幅噪声
-    const retailSentiment = clamp(momentum * 0.4 + rand(-0.23, 0.23), -1, 1)
-    // 机构：均衡 + 注重基本面
-    const bigSentiment = clamp(0.35 * momentum + 0.35 * fundamentalSignal + rand(-0.30, 0.30), -1, 1)
-    // 游资：基本面为主
-    const hotSentiment = clamp(0.20 * momentum + 0.60 * fundamentalSignal + rand(-0.12, 0.12), -1, 1)
-    // 量化：均线交叉
-    const quantSentiment = (ma5 > ma10 ? 1 : -1) * clamp(1 + rand(-0.22, 0.22), 0.5, 1.2)
+    // ============ 散户 / 机构 / 游资 / 量化4 类参与者信号 ============
+    // 红心/黑心卡牌效果 cardBias（-1 ~ +1）只影响这 4 类参与者，不影响操盘手
+    // cardBias > 0 → 整体看多倾向；cardBias < 0 → 整体看空倾向
+    const cb = s.cardBias || 0
+    // 概率倾斜强度：cardBias × 0.35（最大约 ±35%）
+    const cbStrength = cb * 0.35
 
-    // 操盘手：四阶段策略
+    // 散户：跟趋势 + 大幅噪声（被卡片影响：噪声分布向偏向方向倾斜）
+    const retailNoise = rand(-0.23, 0.23)
+    const retailBiasNoise = cb >= 0
+      ? Math.abs(retailNoise) * (cb > 0 ? 1 : 0)  // 红心：负噪声翻为正
+      : -Math.abs(retailNoise) * (cb < 0 ? 1 : 0) // 黑心：正噪声翻为负
+    const retailSentiment = clamp(momentum * 0.4 + retailBiasNoise + cbStrength, -1, 1)
+
+    // 机构：均衡 + 注重基本面（卡片影响：整体信号 × (1 + cb × 0.4)）
+    const bigRaw = 0.35 * momentum + 0.35 * fundamentalSignal + rand(-0.30, 0.30)
+    const bigSentiment = clamp(bigRaw * (1 + cb * 0.4) + cbStrength, -1, 1)
+
+    // 游资：基本面为主（卡片影响：基本面系数从 0.60 → 0.60 × (1 + cb × 0.4)）
+    const hotRaw = 0.20 * momentum + (0.60 * (1 + cb * 0.4)) * fundamentalSignal + rand(-0.12, 0.12)
+    const hotSentiment = clamp(hotRaw + cbStrength * 0.5, -1, 1)
+
+    // 量化：均线交叉（卡片影响：顺势信号放大、逆势信号衰减）
+    let quantStrength = clamp(1 + rand(-0.22, 0.22), 0.5, 1.2)
+    if (ma5 > ma10) {
+      // 已经在上升趋势：红心 → 放大；黑心 → 衰减
+      quantStrength *= (1 + cb * 0.5)
+    } else if (ma5 < ma10) {
+      // 在下降趋势：黑心 → 放大；红心 → 衰减
+      quantStrength *= (1 - cb * 0.5)
+    }
+    const quantSentiment = (ma5 > ma10 ? 1 : -1) * clamp(quantStrength, 0.3, 1.5)
+
+    // 操盘手：四阶段策略（❌ 不受 cardBias 影响）
     let operatorSentiment = 0
     if (!s.isNoManipulator && i === OPERATOR_PLAN.target) {
       switch (OPERATOR_PLAN.stage) {
@@ -672,6 +819,14 @@ function simulateMarketDay(stocks: Stock[]): void {
     if (s.history.length > 200) {
       s.history.shift()
       s.volumes.shift()
+    }
+
+    // 卡片效果（cardBias）倒数：每天结束后 -1 天，到期清零
+    if (s.cardBiasDays > 0) {
+      s.cardBiasDays--
+      if (s.cardBiasDays === 0) {
+        s.cardBias = 0
+      }
     }
 
     // 调试：触发反操盘
@@ -820,6 +975,10 @@ function generateStocks(): Stock[] {
         change: 0,
         trend: null,
         trendDays: 0,
+        cardBias: 0,
+        cardBiasDays: 0,
+        cardBiasLastUsedTurn: -999,
+        cardBiasShield: false,
         news: undefined,
         limitUp: false,
         limitDown: false,
@@ -855,19 +1014,33 @@ function generateStocks(): Stock[] {
 
 function generateFutures(): FuturesContract[] {
   const futures: FuturesContract[] = []
-  const basePrices = { gold: 1800, silver: 25, diamond: 5000 } // 黄金/白银/钻石基础价
+  // 真实参考价格（单位: 元/吨 或 元/盎司，游戏中简化处理）
+  const basePrices: Record<string, { price: number; unit: number; volatility: number }> = {
+    gold:     { price: 1800,  unit: 1,   volatility: 0.025 },  // 黄金（贵金属/手）
+    silver:   { price: 25,    unit: 1,   volatility: 0.030 },
+    diamond:  { price: 5000,  unit: 1,   volatility: 0.020 },
+    cement:   { price: 400,   unit: 1,   volatility: 0.040 },  // 水泥
+    steel:    { price: 4500,  unit: 1,   volatility: 0.045 },  // 钢材
+    rubber:   { price: 15000, unit: 1,   volatility: 0.050 },  // 橡胶
+    oil:      { price: 600,   unit: 1,   volatility: 0.055 },  // 原油
+    wheat:    { price: 3000,  unit: 1,   volatility: 0.060 }   // 小麦
+  }
   FUTURES_NAMES.forEach((f, i) => {
-    const base = basePrices[f.type]
+    const cfg = basePrices[f.type]
+    const base = cfg.price
     const initialPrice = Math.round(base * (0.85 + Math.random() * 0.3) * 100) / 100
     const history = [{ open: initialPrice, high: initialPrice, low: initialPrice, close: initialPrice, volume: 0 }]
     const fc: FuturesContract = {
       symbol: `FT${String(i + 1).padStart(2, '0')}`,
       name: f.name,
       type: f.type,
+      category: f.category,
+      isMaterial: f.isMaterial,
       price: initialPrice,
       change: 0,
-      unit: 1,
+      unit: cfg.unit,
       base,
+      volatility: cfg.volatility,
       history,
       volumes: [0],
       eventEffect: 1.0,
@@ -880,7 +1053,18 @@ function generateFutures(): FuturesContract[] {
       consolidateDays: 0,
       isConsolidating: false,
       isNoManipulator: false,
-      noManipulatorDays: 0
+      noManipulatorDays: 0,
+      cardBias: 0,
+      cardBiasDays: 0,
+      cardBiasLastUsedTurn: -999,
+      cardBiasShield: false,
+      // 涨跌停 = 单日波动率 × 6（与之前一致）
+      limitThreshold: cfg.volatility * 6,
+      limitUp: false,
+      limitDown: false,
+      // 合约到期天数（30 天后到期，可实物交割）
+      expiresInDays: 30 + Math.floor(Math.random() * 30),
+      expiresOnDay: 0 // 房间创建时计算
     }
     futures.push(fc)
   })
@@ -898,7 +1082,7 @@ function generateFutures(): FuturesContract[] {
   return futures
 }
 
-// 期货模拟（简化版：无操盘手，事件影响小）
+// 期货模拟：每个品种独立波动率和事件 + 涨跌停
 function simulateFuturesDay(f: FuturesContract): void {
   if (f.consolidateDays > 0) {
     f.consolidateDays--
@@ -911,6 +1095,10 @@ function simulateFuturesDay(f: FuturesContract): void {
     f.isNoManipulator = false
   }
 
+  // 重置每日涨跌停状态（每天重新计算）
+  f.limitUp = false
+  f.limitDown = false
+
   if (f.eventDays > 0) {
     f.eventDays--
     if (f.eventDays === 0) {
@@ -918,13 +1106,40 @@ function simulateFuturesDay(f: FuturesContract): void {
       f.eventDesc = '无重大事件'
     }
   } else if (Math.random() < 0.10) {
+    // 根据商品类型生成不同的"基本面事件"
     const r = randInt(0, 4)
-    switch (r) {
-      case 0: f.eventEffect = 1.18; f.eventDesc = '产地供应紧张'; f.eventDays = randInt(7, 12); break
-      case 1: f.eventEffect = 0.85; f.eventDesc = '需求疲软'; f.eventDays = randInt(5, 10); break
-      case 2: f.eventEffect = 1.12; f.eventDesc = '央行储备增加'; f.eventDays = randInt(6, 14); break
-      case 3: f.eventEffect = 0.90; f.eventDesc = '开采技术突破'; f.eventDays = randInt(5, 11); break
-      case 4: f.eventEffect = 1.25; f.eventDesc = '稀缺性溢价'; f.eventDays = randInt(4, 8); break
+    if (f.category === 'precious') {
+      switch (r) {
+        case 0: f.eventEffect = 1.18; f.eventDesc = '央行储备增加'; f.eventDays = randInt(7, 12); break
+        case 1: f.eventEffect = 0.85; f.eventDesc = '避险情绪降温'; f.eventDays = randInt(5, 10); break
+        case 2: f.eventEffect = 1.12; f.eventDesc = '地缘政治紧张'; f.eventDays = randInt(6, 14); break
+        case 3: f.eventEffect = 0.90; f.eventDesc = '开采技术突破'; f.eventDays = randInt(5, 11); break
+        case 4: f.eventEffect = 1.25; f.eventDesc = '稀缺性溢价'; f.eventDays = randInt(4, 8); break
+      }
+    } else if (f.category === 'material') {
+      switch (r) {
+        case 0: f.eventEffect = 1.22; f.eventDesc = '基建需求激增'; f.eventDays = randInt(7, 14); break
+        case 1: f.eventEffect = 0.82; f.eventDesc = '产能严重过剩'; f.eventDays = randInt(5, 10); break
+        case 2: f.eventEffect = 1.15; f.eventDesc = '环保限产令'; f.eventDays = randInt(6, 12); break
+        case 3: f.eventEffect = 0.88; f.eventDesc = '地产行业萎缩'; f.eventDays = randInt(5, 11); break
+        case 4: f.eventEffect = 1.30; f.eventDesc = '原材料供给中断'; f.eventDays = randInt(4, 8); break
+      }
+    } else if (f.category === 'energy') {
+      switch (r) {
+        case 0: f.eventEffect = 1.20; f.eventDesc = 'OPEC减产协议'; f.eventDays = randInt(7, 12); break
+        case 1: f.eventEffect = 0.83; f.eventDesc = '页岩油增产'; f.eventDays = randInt(5, 10); break
+        case 2: f.eventEffect = 1.18; f.eventDesc = '中东局势紧张'; f.eventDays = randInt(6, 14); break
+        case 3: f.eventEffect = 0.88; f.eventDesc = '全球需求疲软'; f.eventDays = randInt(5, 11); break
+        case 4: f.eventEffect = 1.25; f.eventDesc = '战略储备释放'; f.eventDays = randInt(4, 8); break
+      }
+    } else {
+      switch (r) {
+        case 0: f.eventEffect = 1.20; f.eventDesc = '产区干旱减产'; f.eventDays = randInt(7, 12); break
+        case 1: f.eventEffect = 0.85; f.eventDesc = '丰产丰收预期'; f.eventDays = randInt(5, 10); break
+        case 2: f.eventEffect = 1.15; f.eventDesc = '出口禁令利好'; f.eventDays = randInt(6, 14); break
+        case 3: f.eventEffect = 0.88; f.eventDesc = '进口大幅增加'; f.eventDays = randInt(5, 11); break
+        case 4: f.eventEffect = 1.25; f.eventDesc = '食品危机恐慌'; f.eventDays = randInt(4, 8); break
+      }
     }
   }
 
@@ -935,20 +1150,41 @@ function simulateFuturesDay(f: FuturesContract): void {
   const fundamentalSignal = (f.base * f.eventEffect - lastClose) / Math.max(lastClose, 1)
   const momentum = prevClose > 0 ? (lastClose - prevClose) / prevClose : 0
 
-  // 期货价格主要由基本面 + 趋势驱动
+  // 期货价格主要由基本面 + 趋势驱动（每个品种波动率不同）
   const meanReversion = (f.base * f.eventEffect - lastClose) / lastClose * 0.06
   const trendBias = (ma5 - ma10) / Math.max(ma10, 1) * 0.5
   const eventBias = (f.eventEffect - 1.0) * 0.08
-  const noise = rand(-0.025, 0.025)
+  const noise = rand(-f.volatility, f.volatility)
 
-  let dailyReturn = clamp(meanReversion + trendBias + eventBias + momentum * 0.3 + noise, -0.15, 0.15)
+  // ============ 红心/黑心卡影响（散户/机构/游资/量化四类参与者）============
+  // 期货卡片效果：直接放大趋势 + 偏置噪声分布（不修改波动率基础值）
+  const fcb = f.cardBias || 0
+  const cardTrendBias = fcb * 0.04  // 最大 ±4% 趋势加成
+  const cardMomentumBias = (ma5 > ma10 ? 1 : -1) * Math.abs(fcb) * 0.02  // 顺势放大
+  const cardNoiseBias = fcb * f.volatility * 0.3  // 噪声分布偏移
+
+  const maxChange = f.limitThreshold
+
+  let dailyReturn = clamp(
+    meanReversion + trendBias + eventBias + momentum * 0.3 + noise +
+    cardTrendBias + cardMomentumBias + cardNoiseBias,
+    -maxChange, maxChange
+  )
 
   if (f.isConsolidating && !f.isNoManipulator) {
     dailyReturn = clamp(dailyReturn, -0.005, 0.005)
   }
 
-  dailyReturn = clamp(dailyReturn, -0.15, 0.15)
+  dailyReturn = clamp(dailyReturn, -maxChange, maxChange)
   const newPrice = Math.max(0.01, Math.round(lastClose * Math.exp(dailyReturn) * 100) / 100)
+
+  // 涨跌停检测
+  if (dailyReturn >= maxChange - 0.0001) {
+    f.limitUp = true
+  }
+  if (dailyReturn <= -maxChange + 0.0001) {
+    f.limitDown = true
+  }
 
   const open = lastClose
   const range = Math.max(0.01, Math.abs(newPrice - open))
@@ -964,6 +1200,14 @@ function simulateFuturesDay(f: FuturesContract): void {
   if (f.history.length > 200) {
     f.history.shift()
     f.volumes.shift()
+  }
+
+  // 卡片效果（cardBias）倒数：每天结束后 -1 天，到期清零
+  if (f.cardBiasDays > 0) {
+    f.cardBiasDays--
+    if (f.cardBiasDays === 0) {
+      f.cardBias = 0
+    }
   }
 
   f.price = round(newPrice)
@@ -996,7 +1240,13 @@ function calculateAssets(player: Player, room: GameRoom): number {
   // 房产估值
   total += player.properties.reduce((sum, cellId) => {
     const cell = room.cells[cellId]
-    return sum + (cell?.basePrice || 0) * (1 + (cell?.level || 0) * 0.5)
+    if (!cell) return sum
+    let val = cell.basePrice * (1 + (cell.level || 0) * 0.5)
+    if (cell.upgrade === 'hotel') val *= 3
+    if (cell.upgrade === 'smelter') val *= 4
+    if (cell.upgrade === 'diamondMine') val *= 5
+    if (cell.upgrade === 'agency') val *= 4
+    return sum + val
   }, 0)
   // 股票市值（多头 - 空头）
   total += player.stocks.reduce((sum, holding) => {
@@ -1021,6 +1271,15 @@ function calculateAssets(player: Player, room: GameRoom): number {
   const diamondFutures = room.futures.find(f => f.type === 'diamond')
   const diamondPrice = diamondFutures ? diamondFutures.price : 5000
   total += player.diamonds * diamondPrice
+  // 建材估值（按对应期货价格）
+  const cementFutures = room.futures.find(f => f.type === 'cement')
+  const steelFutures = room.futures.find(f => f.type === 'steel')
+  const rubberFutures = room.futures.find(f => f.type === 'rubber')
+  const goldFutures = room.futures.find(f => f.type === 'gold')
+  total += player.materials.cement * (cementFutures ? cementFutures.price : 400)
+  total += player.materials.steel * (steelFutures ? steelFutures.price : 4500)
+  total += player.materials.rubber * (rubberFutures ? rubberFutures.price : 15000)
+  total += player.materials.preciousMetals * (goldFutures ? goldFutures.price : 1800)
   // 减去未还贷款（本金 + 利息）
   total -= player.loans.reduce((sum, loan) => {
     const daysElapsed = LOAN_TURNS_UNTIL_DUE - loan.turnsRemaining
@@ -1077,10 +1336,24 @@ function checkFuturesMarginCalls(room: GameRoom) {
 }
 
 function broadcastRoomState(room: GameRoom) {
+  // 优化：图表数据只发最近 60 根 K 线（其余服务端存储完整），减少 socket 传输量
+  const slimStock = (s: any) => ({
+    ...s,
+    history: s.history.slice(-60),
+    volumes: s.volumes.slice(-60),
+    kline: s.kline ? s.kline.slice(-60) : undefined
+  })
+  const slimFutures = (f: any) => ({
+    ...f,
+    history: f.history.slice(-60),
+    volumes: f.volumes.slice(-60),
+    kline: f.kline ? f.kline.slice(-60) : undefined
+  })
   const state = {
     roomCode: room.code,
     mode: room.mode,
     targetAssets: room.targetAssets,
+    maxPlayers: room.maxPlayers || (room.mode === 'multiplayer' ? 6 : room.players.length),
     winnerId: room.winnerId,
     currentTurn: room.currentTurn,
     players: room.players.map(p => ({
@@ -1091,8 +1364,8 @@ function broadcastRoomState(room: GameRoom) {
       loans: p.loans.map(l => ({ ...l }))
     })),
     cells: room.cells,
-    stocks: room.stocks,
-    futures: room.futures,
+    stocks: room.stocks.map(slimStock),
+    futures: room.futures.map(slimFutures),
     gameDate: room.gameDate,
     currentPlayerIndex: room.currentPlayerIndex,
     gamePhase: room.phase,
@@ -1135,7 +1408,22 @@ function generateStockNews(room: GameRoom) {
       ? STOCK_NEWS.good[Math.floor(Math.random() * STOCK_NEWS.good.length)]
       : STOCK_NEWS.bad[Math.floor(Math.random() * STOCK_NEWS.bad.length)]
     room.stocks[idx].news = news
-    sendMessage(room, 'info', `${room.stocks[idx].name}(${room.stocks[idx].symbol}): ${news}`)
+
+    // 只广播给：站在股票交易所 / 拥有同花顺软件 的玩家
+    // 其他玩家只看到市场上有"突发消息"的占位提示
+    const stock = room.stocks[idx]
+    const tipMsg = `${stock.name}(${stock.symbol}): 📢 突发消息（需前往股票交易所或购买同花顺软件查看详情）`
+    io.to(room.code).emit('message', { type: 'info', content: tipMsg })
+
+    // 给拥有同花顺或站在交易所的玩家发送详细消息
+    room.players.forEach(p => {
+      if (p.hasTonghuashun || p.atStockExchange) {
+        io.to(p.socketId).emit('message', {
+          type: 'info',
+          content: `${stock.name}(${stock.symbol}): ${news}`
+        })
+      }
+    })
   })
 }
 
@@ -1192,15 +1480,83 @@ function recalcAllAssets(room: GameRoom) {
 // ============ Update Futures Prices ============
 function updateFuturesPrices(room: GameRoom) {
   room.futures.forEach(f => {
+    // 减少到期天数
+    if (f.expiresInDays > 0) {
+      f.expiresInDays--
+      if (f.expiresInDays === 0) {
+        // 合约到期：自动处理所有玩家的持仓
+        handleFuturesExpiry(room, f)
+        // 重新生成合约（保持市场活跃）
+        const newF = generateFutures().find(nf => nf.type === f.type)
+        if (newF) {
+          newF.expiresOnDay = room.currentTurn + newF.expiresInDays
+          f.symbol = newF.symbol
+          f.expiresInDays = newF.expiresInDays
+          f.expiresOnDay = newF.expiresOnDay
+          f.base = newF.base
+          f.price = newF.base
+          f.history = newF.history
+          f.volumes = newF.volumes
+        }
+        sendMessage(room, 'warning', `📅 ${f.name} 合约已到期，市场推出新合约`)
+      }
+    }
     simulateFuturesDay(f)
     const closes = f.history.map(h => h.close)
     f.ma5 = calcMA(closes, 5)
     f.ma10 = calcMA(closes, 10)
     f.ma20 = calcMA(closes, 20)
     f.kline = closes.slice(-30)
+
+    // 期货事件消息：只广播给期货交易所 / 拥有同花顺软件的玩家
+    if (f.eventDesc !== '无重大事件') {
+      const tipMsg = `${f.name}: 📢 突发事件（需前往期货交易所或购买同花顺软件查看详情）`
+      io.to(room.code).emit('message', { type: 'info', content: tipMsg })
+      room.players.forEach(p => {
+        if (p.hasTonghuashun || p.atFuturesExchange) {
+          io.to(p.socketId).emit('message', {
+            type: 'info',
+            content: `${f.name}: ${f.eventDesc}（剩余 ${f.eventDays} 天）`
+          })
+        }
+      })
+    }
     f.news = f.eventDesc !== '无重大事件' ? f.eventDesc : undefined
   })
   recalcAllAssets(room)
+}
+
+// 合约到期处理：自动按当前价平仓（或强制平仓）
+function handleFuturesExpiry(room: GameRoom, futures: FuturesContract) {
+  const matMap: Record<string, 'cement' | 'steel' | 'rubber'> = {
+    cement: 'cement', steel: 'steel', rubber: 'rubber'
+  }
+  room.players.forEach(p => {
+    if (!p.futuresHoldings) return
+    const h = p.futuresHoldings.find(fh => fh.symbol === futures.symbol)
+    if (!h) return
+    // 自动按当前价强制平仓（未主动交割）
+    if (h.longQuantity > 0) {
+      const profit = (futures.price - h.longAvgCost) * futures.unit * h.longQuantity
+      const releaseFrozen = h.longFrozenCost
+      p.deposit += releaseFrozen + profit
+      sendMessage(room, 'info',
+        `${p.name} 的 ${h.longQuantity} 手 ${futures.name} 多头到期自动平仓，${profit >= 0 ? '获利' : '亏损'} $${Math.abs(Math.round(profit))}`)
+      h.longQuantity = 0
+      h.longAvgCost = 0
+      h.longFrozenCost = 0
+    }
+    if (h.shortQuantity > 0) {
+      const profit = (h.shortAvgCost - futures.price) * futures.unit * h.shortQuantity
+      p.deposit += h.shortInitialMargin + profit
+      sendMessage(room, 'info',
+        `${p.name} 的 ${h.shortQuantity} 手 ${futures.name} 空头到期自动平仓，${profit >= 0 ? '获利' : '亏损'} $${Math.abs(Math.round(profit))}`)
+      h.shortQuantity = 0
+      h.shortAvgCost = 0
+      h.shortInitialMargin = 0
+      h.shortMaintenanceMargin = 0
+    }
+  })
 }
 
 
@@ -1210,6 +1566,8 @@ function processCellEvent(room: GameRoom, player: Player) {
 
   // 清除经过银行标记（只有站在银行才有效）
   player.passedBank = false
+  player.atStockExchange = false
+  player.atFuturesExchange = false
 
   // 地块访问计数（升级用）：玩家落在自己拥有的地块上时 +1
   if (cell.type === 'empty' && cell.owner === player.id) {
@@ -1228,19 +1586,36 @@ function processCellEvent(room: GameRoom, player: Player) {
       break
 
     case 'stock':
-      sendMessage(room, 'info', `${player.name} 来到股票交易所，可在下方面板进行股票交易`)
+      player.atStockExchange = true
+      sendMessage(room, 'info', `${player.name} 来到股票交易所，可查看股票利好利空消息或购买同花顺软件`)
       break
 
     case 'futures':
-      sendMessage(room, 'info', `${player.name} 来到期货交易所，可用存款交易期货赚取钻石`)
+      player.atFuturesExchange = true
+      sendMessage(room, 'info', `${player.name} 来到期货交易所，可查看期货事件、交易建材、兑换吸引力`)
       break
 
     case 'chance': {
-      // 走到机会地皮：随机获得一张可购买卡片
-      const giftCards = ['停留卡', '骰子卡', '均贫卡', '红心卡', '黑心卡', '地皮升级卡']
-      const cardName = giftCards[Math.floor(Math.random() * giftCards.length)]
-      player.cards.push(cardName)
-      sendMessage(room, 'success', `${player.name} 抽到机会卡，获得 [${cardName}]`)
+      // 走到机会地皮：随机获得一张可购买卡片或建材
+      const r = Math.random()
+      if (r < 0.4) {
+        const giftCards = ['停留卡', '骰子卡', '均贫卡', '红心卡', '黑心卡', '地皮升级卡', '护盾卡', '谣言卡']
+        const cardName = giftCards[Math.floor(Math.random() * giftCards.length)]
+        player.cards.push(cardName)
+        sendMessage(room, 'success', `${player.name} 抽到机会卡，获得 [${cardName}]`)
+      } else if (r < 0.7) {
+        // 建材
+        const materials: ('cement' | 'steel' | 'rubber')[] = ['cement', 'steel', 'rubber']
+        const mat = materials[Math.floor(Math.random() * materials.length)]
+        const qty = Math.floor(Math.random() * 5) + 3
+        player.materials[mat] += qty
+        const matName = mat === 'cement' ? '水泥' : mat === 'steel' ? '钢材' : '橡胶'
+        sendMessage(room, 'success', `${player.name} 获得建材奖励：${matName} ×${qty}`)
+      } else {
+        // 现金
+        player.cash += 1000
+        sendMessage(room, 'info', `${player.name} 获得 $1000`)
+      }
       break
     }
 
@@ -1269,15 +1644,51 @@ function processCellEvent(room: GameRoom, player: Player) {
       sendMessage(room, 'success', `${player.name} 来到钻石格，获得 ${diamondReward}💎`)
       break
 
+    case 'realestate': {
+      // 房地产交易中心：拍卖 + 出售自有地皮换现金
+      const auctionCell = room.cells.find(c => c.auctionActive)
+      if (auctionCell) {
+        sendMessage(room, 'warning', `🏛️ ${player.name} 来到房地产交易中心 - 拍卖进行中！`)
+      } else {
+        const daysSinceStart = room.currentTurn
+        if (daysSinceStart > 0 && daysSinceStart % 7 === 0) {
+          startNewAuction(room)
+          sendMessage(room, 'warning', `🏛️ 拍卖开始！前往房地产交易中心或输入 buyAuction 出价`)
+        } else {
+          sendMessage(room, 'info', `🏛️ ${player.name} 在房地产交易中心，可出售自己的地皮换取现金`)
+        }
+      }
+      break
+    }
+
     case 'empty':
+      // 拍卖地皮：免过路费
+      if (cell.fromAuction) {
+        sendMessage(room, 'info', `${player.name} 踏入拍卖地 [${cell.name}]（免过路费）`)
+        break
+      }
       if (cell.owner && cell.owner !== player.id) {
         const owner = room.players.find(p => p.id === cell.owner)
         if (owner && !owner.isBankrupt) {
-          const fee = cell.basePrice * Math.pow(2, cell.level)
+          // 计算过路费：基础 + 等级 + 房产中介翻倍
+          let fee = cell.basePrice * Math.pow(2, cell.level)
+          if (cell.upgrade === 'agency') fee *= 2
+          // 该业主是否有任意房产是房产中介，过路费翻倍
+          const hasAgency = owner.properties.some(pid => room.cells[pid]?.upgrade === 'agency')
+          if (hasAgency) fee *= 2
+          // 🏨 酒店 buff：所有地皮费用 +10%
+          const hasHotel = owner.properties.some(pid => room.cells[pid]?.upgrade === 'hotel')
+          if (hasHotel) fee = Math.ceil(fee * 1.1)
+          // 📈 增值系数：每次收过路费 +2%，封顶 200%
+          const appreciation = cell.appreciation || 0
+          const appreciationMul = 1 + Math.min(appreciation, 2.0)
+          fee = Math.ceil(fee * appreciationMul)
           if (player.cash >= fee) {
             player.cash -= fee
             owner.cash += fee
-            sendMessage(room, 'info', `${player.name} 支付过路费 $${fee} 给 ${owner.name}`)
+            // 每次收过路费：增值 +2%（封顶 200% = 3.0）
+            cell.appreciation = Math.min(2.0, appreciation + 0.02)
+            sendMessage(room, 'info', `${player.name} 支付过路费 $${fee.toLocaleString()} 给 ${owner.name}${hasHotel ? '（含酒店+10%加成）' : ''}${appreciation > 0 ? `（含增值+${Math.round(appreciation * 100)}%）` : ''}`)
           } else {
             player.isBankrupt = true
             owner.cash += player.cash
@@ -1300,6 +1711,65 @@ function processCellEvent(room: GameRoom, player: Player) {
     })
     sendMessage(room, 'error', `${player.name} 破产了!`)
   }
+}
+
+// ============ Real Estate Auction System ============
+// 选取当前无人拥有的高品质地皮（basePrice 最高 3 块）作为本次拍卖品
+function startNewAuction(room: GameRoom) {
+  // 清除上次拍卖标记
+  room.cells.forEach(c => {
+    c.auctionActive = false
+    c.auctionReservedPrice = undefined
+    c.auctionHighestBid = undefined
+    c.auctionHighestBidder = undefined
+  })
+  // 选无人拥有的高价地皮
+  const candidates = room.cells
+    .filter(c => c.type === 'empty' && !c.owner)
+    .sort((a, b) => b.basePrice - a.basePrice)
+    .slice(0, 3)
+  if (candidates.length === 0) {
+    sendMessage(room, 'warning', '🏛️ 本次拍卖取消（没有可拍卖的无主地皮）')
+    return
+  }
+  candidates.forEach(c => {
+    c.auctionActive = true
+    c.auctionReservedPrice = Math.floor(c.basePrice * 0.5)
+    c.auctionHighestBid = c.auctionReservedPrice
+    c.auctionHighestBidder = null
+  })
+  const desc = candidates.map(c => `${c.name}(底价$${(c.auctionReservedPrice || 0).toLocaleString()})`).join('、')
+  sendMessage(room, 'warning', `🏛️ 拍卖开始！拍品：${desc}。玩家可通过「buyAuction cellId 出价」参与竞拍（每次加价至少10%）`)
+}
+
+// 拍卖结束：把地皮给最高出价者
+function finalizeAuction(room: GameRoom) {
+  room.cells.forEach(c => {
+    if (!c.auctionActive) return
+    const reserved = c.auctionReservedPrice || 0
+    const highest = c.auctionHighestBid || 0
+    if (c.auctionHighestBidder && highest > reserved) {
+      const winner = room.players.find(p => p.id === c.auctionHighestBidder)
+      if (winner && winner.cash >= highest) {
+        winner.cash -= highest
+        c.owner = winner.id
+        c.fromAuction = true
+        c.level = 0
+        c.price = c.basePrice
+        c.visitCount = 0
+        if (!winner.properties.includes(c.id)) winner.properties.push(c.id)
+        sendMessage(room, 'success', `🏆 ${winner.name} 以 $${highest.toLocaleString()} 拍得 [${c.name}]（永久免过路费，可减半升级）`)
+      } else {
+        sendMessage(room, 'info', `🏛️ [${c.name}] 流拍（最高出价者资金不足）`)
+      }
+    } else {
+      sendMessage(room, 'info', `🏛️ [${c.name}] 流拍（无有效出价）`)
+    }
+    c.auctionActive = false
+    c.auctionReservedPrice = undefined
+    c.auctionHighestBid = undefined
+    c.auctionHighestBidder = undefined
+  })
 }
 
 // ============ Process Loans (called each turn) ============
@@ -1343,15 +1813,18 @@ function processLoans(room: GameRoom) {
 }
 
 // ============ Check Win Condition ============
+// 胜利条件：第一个总资产达到目标（默认1亿）的玩家赢（适用于单人和多人模式）
 function checkSingleplayerWin(room: GameRoom): boolean {
-  if (room.mode !== 'singleplayer') return false
   const currentPlayer = room.players[room.currentPlayerIndex]
-  if (!currentPlayer || currentPlayer.isAI) return false
+  if (!currentPlayer) return false
+  // 多人模式下，AI 不参与胜利检测（避免最后一个 AI 触发误结束）
+  if (room.mode === 'multiplayer' && currentPlayer.isAI) return false
   const assets = calculateAssets(currentPlayer, room)
-  if (assets >= room.targetAssets) {
+  const target = room.targetAssets || 100_000_000
+  if (assets >= target) {
     room.phase = 'ended'
     room.winnerId = currentPlayer.id
-    sendMessage(room, 'success', `🎉 恭喜 ${currentPlayer.name}！总资产达到 $${assets.toLocaleString()}，达成百万富翁目标！`)
+    sendMessage(room, 'success', `🎉 ${currentPlayer.name} 总资产达到 $${assets.toLocaleString()}，达成亿万富翁目标！获得最终胜利！`)
     sendMessage(room, 'info', `游戏共进行 ${room.currentTurn} 回合`)
     broadcastRoomState(room)
     return true
@@ -1360,6 +1833,64 @@ function checkSingleplayerWin(room: GameRoom): boolean {
 }
 
 // ============ Next Player ============
+// 每日结算：处理特殊升级（酒店/冶炼场/钻石矿/房产中介/度假区/购物中心/地标）的回合收益
+function processSpecialUpgrades(room: GameRoom) {
+  const messages: string[] = []
+  room.players.forEach(player => {
+    if (player.isBankrupt) return
+    let diamondBonus = 0
+    let preciousBonus = 0
+    let depositInterest = 0
+    let cashBonus = 0
+    let attractionBonus = 0
+    player.properties.forEach(cellId => {
+      const cell = room.cells[cellId]
+      if (!cell || !cell.upgrade || cell.upgrade === 'normal') return
+      if (cell.upgrade === 'hotel') {
+        // 酒店：每回合按存款 5% 给利息
+        depositInterest += Math.floor(player.deposit * 0.05)
+      } else if (cell.upgrade === 'smelter') {
+        // 冶炼场：每回合 2 贵金属
+        preciousBonus += 2
+      } else if (cell.upgrade === 'diamondMine') {
+        // 钻石矿：每回合 2 钻石
+        diamondBonus += 2
+      } else if (cell.upgrade === 'resort') {
+        // 度假区：每回合 $1000 现金
+        cashBonus += 1000
+      } else if (cell.upgrade === 'mall') {
+        // 购物中心：每回合 $500 现金 + 1 💎
+        cashBonus += 500
+        diamondBonus += 1
+      } else if (cell.upgrade === 'monument') {
+        // 地标：每回合 +5 吸引力（同时是吸引力的来源）
+        attractionBonus += 5
+      }
+    })
+    if (depositInterest > 0) {
+      player.deposit += depositInterest
+      messages.push(`🏨 ${player.name} 的酒店收益 +$${depositInterest.toLocaleString()} 利息`)
+    }
+    if (preciousBonus > 0) {
+      player.materials.preciousMetals += preciousBonus
+      messages.push(`🔥 ${player.name} 的冶炼场产出 +${preciousBonus} 贵金属`)
+    }
+    if (diamondBonus > 0) {
+      player.diamonds += diamondBonus
+      messages.push(`⛏️ ${player.name} 的钻石矿/购物中心产出 +${diamondBonus} 💎`)
+    }
+    if (cashBonus > 0) {
+      player.cash += cashBonus
+      messages.push(`🏖️ ${player.name} 的度假区/购物中心收入 +$${cashBonus.toLocaleString()}`)
+    }
+    if (attractionBonus > 0) {
+      player.attraction = (player.attraction || 0) + attractionBonus
+      messages.push(`🏛️ ${player.name} 的地标建筑产出 +${attractionBonus} 吸引力`)
+    }
+  })
+  messages.forEach(m => sendMessage(room, 'info', m))
+}
+
 function nextPlayer(room: GameRoom) {
   room.players = room.players.filter(p => !p.isBankrupt)
 
@@ -1398,7 +1929,23 @@ function nextPlayer(room: GameRoom) {
   if (room.currentPlayerIndex === 0) {
     room.currentTurn++
     room.gameDate = addDays(room.gameDate, 1)
+    // 通货膨胀：每月（每30天）8%，按当前 basePrice 调整地皮价格
+    if (room.currentTurn % 30 === 0) {
+      room.cells.forEach(c => {
+        if (c.type === 'empty' && c.basePrice > 0) {
+          c.basePrice = Math.floor(c.basePrice * 1.08)
+          c.price = Math.floor(c.basePrice * (1 + (c.level || 0) * 0.5))
+        }
+      })
+      sendMessage(room, 'warning', '📈 通货膨胀！所有地皮价格上涨 8%')
+    }
+    // 拍卖系统：每7天结束当前拍卖并启动新一轮
+    if (room.currentTurn % 7 === 0) {
+      finalizeAuction(room)
+      setTimeout(() => startNewAuction(room), 200)
+    }
     processLoans(room)
+    processSpecialUpgrades(room)
     updateStockPrices(room)
     updateFuturesPrices(room)
     checkMarginCall(room)
@@ -1467,13 +2014,22 @@ function aiTurn(room: GameRoom, player: Player) {
         for (const propId of player.properties) {
           const propCell = room.cells[propId]
           if (propCell.level < 4 && player.cash >= Math.floor(propCell.basePrice * 0.5)) {
-            if (Math.random() < 0.4) {
-              player.cash -= Math.floor(propCell.basePrice * 0.5)
-              propCell.level++
-              propCell.price = Math.floor(propCell.basePrice * (1 + propCell.level * 0.5))
-              sendMessage(room, 'success', `🤖 ${player.name} 将 ${propCell.name} 升级到 Lv.${propCell.level}`)
-              broadcastRoomState(room)
-              break
+            // 检查建材
+            const matCost = UPGRADE_MATERIAL_COST[propCell.level as 1 | 2 | 3]
+            if (matCost && player.materials.cement >= matCost.cement &&
+                player.materials.steel >= matCost.steel &&
+                player.materials.rubber >= matCost.rubber) {
+              if (Math.random() < 0.4) {
+                player.cash -= Math.floor(propCell.basePrice * 0.5)
+                player.materials.cement -= matCost.cement
+                player.materials.steel -= matCost.steel
+                player.materials.rubber -= matCost.rubber
+                propCell.level++
+                propCell.price = Math.floor(propCell.basePrice * (1 + propCell.level * 0.5))
+                sendMessage(room, 'success', `🤖 ${player.name} 将 ${propCell.name} 升级到 Lv.${propCell.level}`)
+                broadcastRoomState(room)
+                break
+              }
             }
           }
         }
@@ -1494,39 +2050,51 @@ io.on('connection', (socket) => {
 
   let currentRoom: GameRoom | null = null
 
-  socket.on('createRoom', ({ playerName }) => {
+  // 创建新玩家（含建材/同花顺等新字段）
+  function makePlayer(id: string, socketId: string, name: string, color: string, isAI: boolean, difficulty?: 'easy' | 'normal' | 'hard'): Player {
+    return {
+      id, socketId, name, color,
+      cash: INITIAL_CASH,
+      deposit: INITIAL_DEPOSIT,
+      diamonds: INITIAL_DIAMONDS,
+      position: 0,
+      properties: [],
+      isBankrupt: false,
+      cards: [],
+      stocks: [],
+      loans: [],
+      passedBank: false,
+      stayTurns: 0,
+      isAI,
+      aiDifficulty: difficulty,
+      // 建材库存（每人初始给少量）
+      materials: { cement: 10, steel: 5, rubber: 2, preciousMetals: 0, diamonds: 0 },
+      // 默认未购买同花顺
+      hasTonghuashun: false,
+      atStockExchange: false,
+      atFuturesExchange: false,
+      attraction: 0
+    }
+  }
+
+  socket.on('createRoom', ({ playerName, maxPlayers = 4 }) => {
     const code = generateRoomCode()
+    const safeMax = Math.max(2, Math.min(6, maxPlayers))
     const room: GameRoom = {
       code,
       mode: 'multiplayer',
-      players: [{
-        id: socket.id,
-        socketId: socket.id,
-        name: playerName,
-        color: PLAYER_COLORS[0],
-        cash: INITIAL_CASH,
-        deposit: INITIAL_DEPOSIT,
-        diamonds: INITIAL_DIAMONDS,
-        position: 0,
-        properties: [],
-        isBankrupt: false,
-        cards: [],
-        stocks: [],
-        loans: [],
-        passedBank: false,
-        stayTurns: 0,
-        isAI: false
-      }],
+      players: [makePlayer(socket.id, socket.id, playerName, PLAYER_COLORS[0], false)],
       cells: generateCells(),
       stocks: generateStocks(),
-      futures: generateFutures(),
+      futures: generateFutures().map(f => ({ ...f, expiresOnDay: 1 + f.expiresInDays })),
       currentPlayerIndex: 0,
       currentTurn: 1,
       phase: 'lobby',
       diceValue: null,
       forcedDice: null,
       stayCurrentTurn: false,
-      targetAssets: 0,
+      targetAssets: 100_000_000, // 多人胜利目标：第一个到1亿者获胜
+      maxPlayers: safeMax,
       winnerId: null,
       turnStartedAt: Date.now(),
       gameDate: todayString()
@@ -1543,47 +2111,12 @@ io.on('connection', (socket) => {
   socket.on('createSingleplayer', ({ playerName, aiCount = 3, difficulty = 'normal' }) => {
     const code = generateRoomCode()
 
-    const humanPlayer: Player = {
-      id: socket.id,
-      socketId: socket.id,
-      name: playerName || '玩家',
-      color: PLAYER_COLORS[0],
-      cash: INITIAL_CASH,
-      deposit: INITIAL_DEPOSIT,
-      diamonds: INITIAL_DIAMONDS,
-      position: 0,
-      properties: [],
-      isBankrupt: false,
-      cards: [],
-      stocks: [],
-      loans: [],
-      passedBank: false,
-      stayTurns: 0,
-      isAI: false
-    }
+    const humanPlayer = makePlayer(socket.id, socket.id, playerName || '玩家', PLAYER_COLORS[0], false)
 
     const players: Player[] = [humanPlayer]
     const aiPool = difficulty === 'easy' ? AI_NAMES_EASY : difficulty === 'hard' ? AI_NAMES_HARD : AI_NAMES_NORMAL
     for (let i = 0; i < aiCount && i < 5; i++) {
-      players.push({
-        id: `ai_${code}_${i}`,
-        socketId: '',
-        name: aiPool[i % aiPool.length],
-        color: PLAYER_COLORS[i + 1],
-        cash: INITIAL_CASH,
-        deposit: INITIAL_DEPOSIT,
-        diamonds: INITIAL_DIAMONDS,
-        position: 0,
-        properties: [],
-        isBankrupt: false,
-        cards: [],
-        stocks: [],
-        loans: [],
-        passedBank: false,
-        stayTurns: 0,
-        isAI: true,
-        aiDifficulty: difficulty
-      })
+      players.push(makePlayer(`ai_${code}_${i}`, '', aiPool[i % aiPool.length], PLAYER_COLORS[i + 1], true, difficulty))
     }
 
     const room: GameRoom = {
@@ -1592,7 +2125,7 @@ io.on('connection', (socket) => {
       players,
       cells: generateCells(),
       stocks: generateStocks(),
-      futures: generateFutures(),
+      futures: generateFutures().map(f => ({ ...f, expiresOnDay: 1 + f.expiresInDays })),
       currentPlayerIndex: 0,
       currentTurn: 1,
       phase: 'playing',
@@ -1600,6 +2133,7 @@ io.on('connection', (socket) => {
       forcedDice: null,
       stayCurrentTurn: false,
       targetAssets: SINGLEPLAYER_TARGET,
+      maxPlayers: players.length,
       winnerId: null,
       turnStartedAt: Date.now(),
       gameDate: todayString()
@@ -1634,29 +2168,12 @@ io.on('connection', (socket) => {
       return
     }
 
-    if (room.players.length >= 6) {
-      socket.emit('error', { message: '房间已满' })
+    if (room.players.length >= (room.maxPlayers || 6)) {
+      socket.emit('error', { message: `房间已满（最多 ${room.maxPlayers || 6} 人）` })
       return
     }
 
-    const player: Player = {
-      id: socket.id,
-      socketId: socket.id,
-      name: playerName,
-      color: PLAYER_COLORS[room.players.length],
-      cash: INITIAL_CASH,
-      deposit: INITIAL_DEPOSIT,
-      diamonds: INITIAL_DIAMONDS,
-      position: 0,
-      properties: [],
-      isBankrupt: false,
-      cards: [],
-      stocks: [],
-      loans: [],
-      passedBank: false,
-      stayTurns: 0,
-      isAI: false
-    }
+    const player = makePlayer(socket.id, socket.id, playerName, PLAYER_COLORS[room.players.length], false)
 
     room.players.push(player)
     socket.join(roomCode)
@@ -1780,6 +2297,65 @@ io.on('connection', (socket) => {
     if (currentRoom.mode === 'singleplayer') checkSingleplayerWin(currentRoom)
   })
 
+  // ============ 出售自有地皮 ============
+  // 在房地产交易中心（realestate，cell.id === 32）上，玩家可以出售自己的任意一块地皮换取现金
+  // 价格计算：基础售价 × (1 + 等级 × 0.5) × 0.7  = 70% 回收率
+  // 出售后：level=0, owner=null, visitCount=0, upgrade=undefined, fromAuction=false
+  socket.on('sellProperty', ({ cellId }) => {
+    if (!currentRoom) return
+
+    const currentPlayer = currentRoom.players[currentRoom.currentPlayerIndex]
+    if (!currentPlayer || currentPlayer.id !== socket.id) {
+      socket.emit('error', { message: '不是你的回合' })
+      return
+    }
+
+    // 必须站在房地产交易中心
+    const standingCell = currentRoom.cells[currentPlayer.position]
+    if (!standingCell || standingCell.type !== 'realestate') {
+      socket.emit('error', { message: '需在房地产交易中心才能出售地皮' })
+      return
+    }
+
+    const cell = currentRoom.cells[cellId]
+    if (!cell || cell.owner !== currentPlayer.id) {
+      socket.emit('error', { message: '只能出售自己的地皮' })
+      return
+    }
+    // 不允许出售正在拍卖中的地块
+    if (cell.auctionActive) {
+      socket.emit('error', { message: '该地块正在拍卖，无法出售' })
+      return
+    }
+
+    // 计算回收金额：basePrice × (1 + level × 0.5) × 0.7
+    // 拍卖地 100% 回收（含拍买溢价）
+    const levelMultiplier = 1 + cell.level * 0.5
+    const recoveryRate = cell.fromAuction ? 1.0 : 0.7
+    const salePrice = Math.max(
+      Math.floor(cell.basePrice * levelMultiplier * recoveryRate),
+      Math.floor(cell.basePrice * 0.5) // 保底：至少能回收 50% 基础价
+    )
+
+    // 给现金
+    currentPlayer.cash += salePrice
+
+    // 清除地皮状态：变回空地
+    cell.owner = null
+    cell.level = 0
+    cell.price = cell.basePrice
+    cell.visitCount = 0
+    cell.upgrade = undefined
+    cell.fromAuction = false
+
+    // 从玩家 properties 中移除
+    currentPlayer.properties = currentPlayer.properties.filter(id => id !== cellId)
+
+    sendMessage(currentRoom, 'success',
+      `🏪 ${currentPlayer.name} 在房地产交易中心出售了 ${cell.name}（${cell.level >= 1 ? `${cell.level}级` : '空地'}），获得 $${salePrice.toLocaleString()}`)
+    broadcastRoomState(currentRoom)
+  })
+
   // ============ 升级地块 ============
   socket.on('upgradeProperty', ({ cellId }) => {
     if (!currentRoom) return
@@ -1797,32 +2373,150 @@ io.on('connection', (socket) => {
     }
 
     if (cell.level >= 4) {
-      socket.emit('error', { message: '已达最高等级' })
+      socket.emit('error', { message: '已达最高等级，请使用 specialUpgrade 选择特殊升级方式' })
       return
     }
 
-    // 第二次到同一块地才能升级（visitCount >= 2）
+    // 第二次到同一块地才能升级（visitCount >= 2）；拍卖地皮无此限制
     const visits = cell.visitCount || 0
-    if (visits < 2) {
+    if (!cell.fromAuction && visits < 2) {
       socket.emit('error', { message: `需要再次到达此地才能升级（已到 ${visits} 次，需要 2 次）` })
       return
     }
 
-    // 升级费用固定 $500
-    const upgradeCost = 500
-    if (currentPlayer.cash + currentPlayer.deposit < upgradeCost) {
-      socket.emit('error', { message: '现金+存款不足 $500' })
+    // 升级费用：现金 + 建材（拍卖地皮费用/建材全部减半，可直接升级到顶级，无次数限制）
+    const nextLevel = cell.level + 1
+    const matCost = UPGRADE_MATERIAL_COST[cell.level as 1 | 2 | 3]
+    const discount = cell.fromAuction ? 0.5 : 1
+    const cashCost = Math.floor(cell.basePrice * 0.5 * discount)
+    const discountedMat = {
+      cement: Math.ceil(matCost.cement * discount),
+      steel: Math.ceil(matCost.steel * discount),
+      rubber: Math.ceil(matCost.rubber * discount),
+    }
+    if (!matCost) {
+      socket.emit('error', { message: '升级配置错误' })
+      return
+    }
+    if (currentPlayer.cash + currentPlayer.deposit < cashCost) {
+      socket.emit('error', { message: `现金+存款不足 $${cashCost}` })
+      return
+    }
+    if (currentPlayer.materials.cement < discountedMat.cement ||
+        currentPlayer.materials.steel < discountedMat.steel ||
+        currentPlayer.materials.rubber < discountedMat.rubber) {
+      socket.emit('error', {
+        message: `建材不足！需要 水泥×${discountedMat.cement} 钢材×${discountedMat.steel} 橡胶×${discountedMat.rubber}${discount < 1 ? '（拍卖地皮，建材减半）' : '（可在期货市场兑换）'}`
+      })
       return
     }
 
-    // 先扣现金，不足从存款扣
-    deductFunds(currentPlayer, upgradeCost, 'auto')
-    cell.level++
+    // 扣现金 + 建材
+    deductFunds(currentPlayer, cashCost, 'auto')
+    currentPlayer.materials.cement -= discountedMat.cement
+    currentPlayer.materials.steel -= discountedMat.steel
+    currentPlayer.materials.rubber -= discountedMat.rubber
+
+    cell.level = nextLevel
     cell.price = Math.floor(cell.basePrice * (1 + cell.level * 0.5))
     // 升级后重置访问计数
     cell.visitCount = 0
 
-    sendMessage(currentRoom, 'success', `${currentPlayer.name} 将 ${cell.name} 升级到 Lv.${cell.level}（花费 $${upgradeCost}）`)
+    sendMessage(currentRoom, 'success',
+      `${currentPlayer.name} 将 ${cell.name} 升级到 Lv.${cell.level}（$${cashCost} + 水泥×${discountedMat.cement} 钢材×${discountedMat.steel} 橡胶×${discountedMat.rubber}${discount < 1 ? '，拍卖地皮减半' : ''}）`)
+    broadcastRoomState(currentRoom)
+
+    if (currentRoom.mode === 'singleplayer') checkSingleplayerWin(currentRoom)
+  })
+
+  // ============ 特殊升级（顶级之后） ============
+  socket.on('specialUpgrade', ({ cellId, type }) => {
+    if (!currentRoom) return
+    const currentPlayer = currentRoom.players[currentRoom.currentPlayerIndex]
+    if (!currentPlayer || currentPlayer.id !== socket.id) {
+      socket.emit('error', { message: '不是你的回合' })
+      return
+    }
+
+    const cell = currentRoom.cells[cellId]
+    if (!cell || cell.owner !== currentPlayer.id) {
+      socket.emit('error', { message: '无法升级此地块' })
+      return
+    }
+
+    if (cell.level < 4) {
+      socket.emit('error', { message: '需要先将地皮升级到顶级 (Lv.4) 才能选择特殊升级' })
+      return
+    }
+    if (cell.upgrade && cell.upgrade !== 'normal') {
+      socket.emit('error', { message: '该地皮已进行过特殊升级' })
+      return
+    }
+    const cost = SPECIAL_UPGRADE_COST[type as keyof typeof SPECIAL_UPGRADE_COST]
+    if (!cost) {
+      socket.emit('error', { message: '未知的升级类型' })
+      return
+    }
+    // 拍卖地皮：特殊升级费用/建材全部减半；吸引力也减半
+    const discount = cell.fromAuction ? 0.5 : 1
+    const discountedCost = {
+      cash: Math.floor(cost.cash * discount),
+      cement: Math.ceil(cost.cement * discount),
+      steel: Math.ceil(cost.steel * discount),
+      rubber: Math.ceil(cost.rubber * discount),
+      preciousMetals: Math.ceil(cost.preciousMetals * discount),
+      attraction: Math.ceil(cost.attraction * discount),
+    }
+
+    // 校验资源
+    if (currentPlayer.cash + currentPlayer.deposit < discountedCost.cash) {
+      socket.emit('error', { message: `现金+存款不足 $${discountedCost.cash.toLocaleString()}${discount < 1 ? '（拍卖地皮半价）' : ''}` })
+      return
+    }
+    if (currentPlayer.materials.cement < discountedCost.cement ||
+        currentPlayer.materials.steel < discountedCost.steel ||
+        currentPlayer.materials.rubber < discountedCost.rubber ||
+        currentPlayer.materials.preciousMetals < discountedCost.preciousMetals) {
+      socket.emit('error', {
+        message: `建材不足：需要 水泥×${discountedCost.cement} 钢材×${discountedCost.steel} 橡胶×${discountedCost.rubber} 贵金属×${discountedCost.preciousMetals}${discount < 1 ? '（拍卖地皮半价）' : ''}`
+      })
+      return
+    }
+    if ((currentPlayer.attraction || 0) < discountedCost.attraction) {
+      socket.emit('error', {
+        message: `吸引力不足：需要 ${discountedCost.attraction} 吸引力，当前 ${currentPlayer.attraction || 0}（吸引力可在期货交易所获取，或拥有地标建筑每回合产出）`
+      })
+      return
+    }
+
+    // 扣款
+    deductFunds(currentPlayer, discountedCost.cash, 'auto')
+    currentPlayer.materials.cement -= discountedCost.cement
+    currentPlayer.materials.steel -= discountedCost.steel
+    currentPlayer.materials.rubber -= discountedCost.rubber
+    currentPlayer.materials.preciousMetals -= discountedCost.preciousMetals
+    currentPlayer.attraction = (currentPlayer.attraction || 0) - discountedCost.attraction
+
+    cell.upgrade = type
+    const names: Record<string, string> = {
+      hotel: '🏨 酒店',
+      smelter: '🔥 贵金属冶炼场',
+      diamondMine: '⛏️ 钻石开采场',
+      agency: '🏢 房产中介',
+      resort: '🏖️ 度假区',
+      mall: '🛍️ 购物中心',
+      monument: '🏛️ 地标建筑'
+    }
+    const costDetail = [
+      `$${discountedCost.cash.toLocaleString()}`,
+      discountedCost.cement && `水泥×${discountedCost.cement}`,
+      discountedCost.steel && `钢材×${discountedCost.steel}`,
+      discountedCost.rubber && `橡胶×${discountedCost.rubber}`,
+      discountedCost.preciousMetals && `贵金属×${discountedCost.preciousMetals}`,
+      discountedCost.attraction && `吸引力×${discountedCost.attraction}`,
+    ].filter(Boolean).join(' + ')
+    sendMessage(currentRoom, 'success',
+      `${currentPlayer.name} 将 ${cell.name} 升级为 [${names[type]}]！（花费 ${costDetail}${discount < 1 ? '，拍卖地皮半价' : ''}）`)
     broadcastRoomState(currentRoom)
 
     if (currentRoom.mode === 'singleplayer') checkSingleplayerWin(currentRoom)
@@ -2032,7 +2726,8 @@ io.on('connection', (socket) => {
 
     const cardPrices: Record<string, number> = {
       '停留卡': 40, '骰子卡': 30, '均贫卡': 100,
-      '红心卡': 60, '黑心卡': 80, '占地卡': 120, '地皮升级卡': 60
+      '红心卡': 60, '黑心卡': 80, '占地卡': 120, '地皮升级卡': 60,
+      '护盾卡': 100, '谣言卡': 50
     }
 
     const price = cardPrices[cardName]
@@ -2070,6 +2765,14 @@ io.on('connection', (socket) => {
 
     currentPlayer.cards.splice(cardIndex, 1)
 
+    // 限制：在股票/期货交易所时，只能使用谣言卡（其它卡片都不能用）
+    const atExchange = currentPlayer.atStockExchange || currentPlayer.atFuturesExchange
+    if (atExchange && cardName !== '谣言卡') {
+      socket.emit('error', { message: '在交易所内不能使用卡片（仅可在交易所散布谣言卡）' })
+      currentPlayer.cards.push(cardName)  // 退还
+      return
+    }
+
     switch (cardName) {
       case '停留卡':
         if (currentRoom.diceValue !== null) {
@@ -2103,29 +2806,164 @@ io.on('connection', (socket) => {
         sendMessage(currentRoom, 'info', `${currentPlayer.name} 使用均贫卡，所有玩家现金变为 $${avgCash}`)
         break
 
-      case '红心卡': {
-        const upStock = currentRoom.stocks.find(s => s.symbol === target)
-        if (!upStock) {
-          socket.emit('error', { message: '股票不存在' })
+      case '谣言卡': {
+        // 谣言卡：对某只股票散布利好/利空消息，引诱其他玩家交易
+        // 限制：必须在股票交易所（有同花顺则可在任意位置）；不能作用于期货
+        if (!currentPlayer.hasTonghuashun && !currentPlayer.atStockExchange) {
+          socket.emit('error', { message: '需在股票交易所或购买同花顺软件才能散布谣言' })
           currentPlayer.cards.push(cardName)
           return
         }
-        upStock.trend = 'up'
-        upStock.trendDays = 3
-        sendMessage(currentRoom, 'success', `${currentPlayer.name} 使用红心卡，${upStock.name} 连续上涨3天`)
+        // target 格式：`${symbol}:${direction}`，direction 为 'good' 或 'bad'
+        const targetStr = String(target || '')
+        const [targetSymbol, direction] = targetStr.split(':')
+        if (!targetSymbol || (direction !== 'good' && direction !== 'bad')) {
+          socket.emit('error', { message: '请选择目标股票及利好/利空方向' })
+          currentPlayer.cards.push(cardName)
+          return
+        }
+
+        // 找到目标（仅股票）
+        const rumorStock = currentRoom.stocks.find(s => s.symbol === targetSymbol)
+        if (!rumorStock) {
+          socket.emit('error', { message: '谣言卡仅能作用于股票（不支持期货）' })
+          currentPlayer.cards.push(cardName)
+          return
+        }
+        const tgt: any = rumorStock
+        const typeLabel = '股票'
+
+        // 谣言效果：设置事件影响（中等强度，4-7 天）
+        const rumorDuration = 4 + Math.floor(Math.random() * 4)  // 4-7 天
+        // 股票：利好/利空 → 触发 base 偏移
+        rumorStock.eventEffect = direction === 'good' ? 1.15 : 0.85
+        rumorStock.eventDays = rumorDuration
+        rumorStock.eventDesc = direction === 'good' ? '🟢 谣言利好（散户跟风）' : '🔴 谣言利空（散户恐慌）'
+        rumorStock.news = direction === 'good'
+          ? `📰 [谣言] ${rumorStock.name} 传闻业绩大超预期，机构资金流入`
+          : `📰 [谣言] ${rumorStock.name} 传闻遭遇重大利空，机构资金撤离`
+
+        // 游戏内广播（仅提示"有谣言"，不显示内容）
+        sendMessage(currentRoom, 'warning',
+          `📢 ${currentPlayer.name} 使用谣言卡，对 ${tgt.name}（${typeLabel}）散布了${direction === 'good' ? '利好' : '利空'}消息！`)
+
+        // 私密提示：消息内容只对站在交易所或有同花顺的玩家可见
+        // （通过现有的 news 机制，前端根据 canViewNews 判断）
+        socket.emit('rumorReport', {
+          targetSymbol: tgt.symbol,
+          targetName: tgt.name,
+          targetType: typeLabel,
+          direction,
+          eventDays: rumorDuration,
+          newsContent: tgt.news,
+          hint: '该消息需前往股票/期货交易所或购买同花顺软件查看详情'
+        })
+        break
+      }
+
+      case '红心卡': {
+        // 1. 找到目标（仅股票）
+        const upStock = currentRoom.stocks.find(s => s.symbol === target)
+        if (!upStock) {
+          socket.emit('error', { message: '红心卡仅能作用于股票（不支持期货）' })
+          currentPlayer.cards.push(cardName)
+          return
+        }
+        const tgt: any = upStock
+        const typeLabel = '股票'
+
+        // 0. 护盾检测：目标已被护盾保护
+        if (tgt.cardBiasShield) {
+          tgt.cardBiasShield = false
+          sendMessage(currentRoom, 'warning',
+            `🛡️ ${tgt.name} 的护盾生效，${currentPlayer.name} 的红心卡无效！`)
+          // 不退还卡牌（仍消耗）
+          break
+        }
+
+        // 2. 冷却检查：同一目标 7 天内不能重复使用
+        const lastUse = tgt.cardBiasLastUsedTurn ?? -999
+        if (currentRoom.currentTurn - lastUse < 7) {
+          socket.emit('error', { message: `该${typeLabel}7天内已受卡片影响，请等待冷却` })
+          currentPlayer.cards.push(cardName)
+          return
+        }
+
+        // 3. 叠加衰减：后用效果 ×0.7
+        const newBias = 0.5
+        tgt.cardBias = (tgt.cardBias ?? 0) >= 0
+          ? Math.max(tgt.cardBias ?? 0, newBias * 0.7)
+          : newBias  // 若当前是负偏置（被黑心），则被红心覆盖
+        tgt.cardBiasDays = 4
+        tgt.cardBiasLastUsedTurn = currentRoom.currentTurn
+
+        sendMessage(currentRoom, 'success',
+          `❤ ${currentPlayer.name} 使用红心卡，${tgt.name} 散户/机构/游资/量化概率看多 +25%（持续4天，不影响操盘手）`)
         break
       }
 
       case '黑心卡': {
         const downStock = currentRoom.stocks.find(s => s.symbol === target)
         if (!downStock) {
-          socket.emit('error', { message: '股票不存在' })
+          socket.emit('error', { message: '黑心卡仅能作用于股票（不支持期货）' })
           currentPlayer.cards.push(cardName)
           return
         }
-        downStock.trend = 'down'
-        downStock.trendDays = 4
-        sendMessage(currentRoom, 'warning', `${currentPlayer.name} 使用黑心卡，${downStock.name} 连续下跌4天`)
+        const tgt: any = downStock
+        const typeLabel = '股票'
+
+        // 0. 护盾检测
+        if (tgt.cardBiasShield) {
+          tgt.cardBiasShield = false
+          sendMessage(currentRoom, 'warning',
+            `🛡️ ${tgt.name} 的护盾生效，${currentPlayer.name} 的黑心卡无效！`)
+          break
+        }
+
+        // 冷却检查
+        const lastUse = tgt.cardBiasLastUsedTurn ?? -999
+        if (currentRoom.currentTurn - lastUse < 7) {
+          socket.emit('error', { message: `该${typeLabel}7天内已受卡片影响，请等待冷却` })
+          currentPlayer.cards.push(cardName)
+          return
+        }
+
+        // 叠加衰减
+        const newBias = -0.6
+        tgt.cardBias = (tgt.cardBias ?? 0) <= 0
+          ? Math.min(tgt.cardBias ?? 0, newBias * 0.7)
+          : newBias  // 若当前是正偏置（被红心），则被黑心覆盖
+        tgt.cardBiasDays = 5
+        tgt.cardBiasLastUsedTurn = currentRoom.currentTurn
+
+        sendMessage(currentRoom, 'warning',
+          `🖤 ${currentPlayer.name} 使用黑心卡，${tgt.name} 散户/机构/游资/量化概率看空 +30%（持续5天，不影响操盘手）`)
+        break
+      }
+
+      case '护盾卡': {
+        // 护盾卡：让自己持有的某股票1次免疫红心/黑心卡影响
+        const shieldStock = currentRoom.stocks.find(s => s.symbol === target)
+        if (!shieldStock) {
+          socket.emit('error', { message: '护盾卡仅能作用于股票（不支持期货）' })
+          currentPlayer.cards.push(cardName)
+          return
+        }
+        const tgt: any = shieldStock
+        const typeLabel = '股票'
+
+        // 检查玩家是否持有该目标
+        const h = currentPlayer.stocks.find(sh => sh.symbol === tgt.symbol)
+        const heldQty = (h ? h.quantity : 0) - (h ? (h.shortQuantity || 0) : 0)
+        if (heldQty <= 0) {
+          socket.emit('error', { message: `未持有${typeLabel}，无法使用护盾卡` })
+          currentPlayer.cards.push(cardName)
+          return
+        }
+
+        tgt.cardBiasShield = true
+        sendMessage(currentRoom, 'success',
+          `🛡️ ${currentPlayer.name} 使用护盾卡，${tgt.name} 下次被卡牌影响时免疫（持续至下次受卡前）`)
         break
       }
 
@@ -2150,19 +2988,31 @@ io.on('connection', (socket) => {
       }
 
       case '占地卡': {
-        // 随机挑选一块无人拥有的地皮，归当前玩家所有
-        const emptyCells = currentRoom.cells.filter(c => c.type === 'empty' && !c.owner)
-        if (emptyCells.length === 0) {
-          socket.emit('error', { message: '没有空地可占领' })
+        // 占地卡：花 200 💎，抢占一块非顶级（Lv<4）且属于他人的地皮
+        if ((currentPlayer.diamonds || 0) < 200) {
+          socket.emit('error', { message: `钻石不足（需 200 💎，当前 ${currentPlayer.diamonds || 0}）` })
           currentPlayer.cards.push(cardName)
           return
         }
-        const targetCell = emptyCells[Math.floor(Math.random() * emptyCells.length)]
-        targetCell.owner = currentPlayer.id
-        if (!currentPlayer.properties.includes(targetCell.id)) {
-          currentPlayer.properties.push(targetCell.id)
+        const targetCells = currentRoom.cells.filter(c => c.type === 'empty' && c.owner && c.owner !== currentPlayer.id && (c.level || 0) < 4)
+        if (targetCells.length === 0) {
+          socket.emit('error', { message: '没有可占用的非顶级地皮' })
+          currentPlayer.cards.push(cardName)
+          return
         }
-        sendMessage(currentRoom, 'warning', `${currentPlayer.name} 使用占地卡，白嫖了 ${targetCell.name}！`)
+        const targetCell = targetCells[Math.floor(Math.random() * targetCells.length)]
+        // 原主人失去
+        const oldOwner = currentRoom.players.find(p => p.id === targetCell.owner)
+        if (oldOwner) {
+          oldOwner.properties = oldOwner.properties.filter(id => id !== targetCell.id)
+        }
+        currentPlayer.diamonds -= 200
+        targetCell.owner = currentPlayer.id
+        targetCell.level = 0
+        targetCell.price = targetCell.basePrice
+        targetCell.visitCount = 0
+        if (!currentPlayer.properties.includes(targetCell.id)) currentPlayer.properties.push(targetCell.id)
+        sendMessage(currentRoom, 'warning', `💎 ${currentPlayer.name} 使用占地卡（200💎），抢走了 ${oldOwner?.name || '无主'} 的 ${targetCell.name}！`)
         break
       }
     }
@@ -2205,15 +3055,16 @@ io.on('connection', (socket) => {
           return
         }
         const buyCost = stock.price * quantity * leverage
-        // 买入从存款扣（无存款时现金补）
-        if (!deductFunds(currentPlayer, buyCost, 'auto')) {
-          socket.emit('error', { message: '现金+存款不足' })
+        // 股票买入只从存款扣（现金留给地皮交易）
+        if (currentPlayer.deposit < buyCost) {
+          socket.emit('error', { message: `存款不足（需 $${buyCost.toLocaleString()}，请先到银行存款）` })
           return
         }
+        currentPlayer.deposit -= buyCost
         const newAvgCost = (holding.avgCost * holding.quantity + stock.price * quantity) / (holding.quantity + quantity)
         holding.avgCost = newAvgCost
         holding.quantity += quantity
-        sendMessage(currentRoom, 'info', `${currentPlayer.name} 以 $${stock.price} 买入 ${quantity} 股 ${stock.name}（${leverage}x杠杆，$${buyCost.toLocaleString()}）`)
+        sendMessage(currentRoom, 'info', `${currentPlayer.name} 以 $${stock.price} 买入 ${quantity} 股 ${stock.name}（${leverage}x杠杆，$${buyCost.toLocaleString()}，存款扣款）`)
         break
 
       case 'sell':
@@ -2282,8 +3133,8 @@ io.on('connection', (socket) => {
     if (currentRoom.mode === 'singleplayer') checkSingleplayerWin(currentRoom)
   })
 
-  // ============ 期货交易 ============
-  socket.on('tradeFutures', ({ symbol, action, quantity }) => {
+  // ============ 期货交易（双向 + T+0 + 杠杆 + 涨跌停 + 实物交割） ============
+  socket.on('tradeFutures', ({ symbol, action, quantity, leverage }) => {
     if (!currentRoom) return
 
     const currentPlayer = currentRoom.players[currentRoom.currentPlayerIndex]
@@ -2298,6 +3149,8 @@ io.on('connection', (socket) => {
       return
     }
 
+    // 杠杆倍数：1~10，1 = 无杠杆（全款），10 = 10 倍杠杆
+    const lev = Math.max(1, Math.min(10, leverage || 1))
     const notional = Math.round(futures.price * futures.unit * quantity)
     const fee = Math.floor(notional * FUTURES_FEE_RATE)
 
@@ -2307,60 +3160,133 @@ io.on('connection', (socket) => {
     let holding = holdings.find(h => h.symbol === symbol)
     if (!holding) {
       holding = {
-        symbol, longQuantity: 0, longAvgCost: 0,
+        symbol,
+        longQuantity: 0, longAvgCost: 0,
         shortQuantity: 0, shortAvgCost: 0,
-        shortInitialMargin: 0, shortMaintenanceMargin: 0
+        shortInitialMargin: 0, shortMaintenanceMargin: 0,
+        longLeverage: 1, shortLeverage: 1,
+        longFrozenCost: 0,
+        longOpenedOnDay: currentRoom.currentTurn, shortOpenedOnDay: currentRoom.currentTurn
       }
       holdings.push(holding)
     }
+    if (holding.longLeverage === undefined) holding.longLeverage = 1
+    if (holding.shortLeverage === undefined) holding.shortLeverage = 1
+    if (holding.longFrozenCost === undefined) holding.longFrozenCost = 0
+    if (holding.longOpenedOnDay === undefined) holding.longOpenedOnDay = currentRoom.currentTurn
+    if (holding.shortOpenedOnDay === undefined) holding.shortOpenedOnDay = currentRoom.currentTurn
 
     switch (action) {
       case 'buy': {
-        // 做多仍按名义价值占用资金。
-        if (!deductFunds(currentPlayer, notional + fee, 'auto')) {
-          socket.emit('error', { message: '资金不足（现金+存款）' })
+        // 开仓做多（看涨）：冻结 cost/lev × lev = cost 的资金，lev > 1 时少冻结
+        if (futures.limitUp) {
+          socket.emit('error', { message: '该期货涨停，无法买入开仓' })
           return
         }
-        holding.longAvgCost = (holding.longAvgCost * holding.longQuantity + futures.price * futures.unit * quantity) / (holding.longQuantity + quantity)
-        holding.longQuantity += quantity
-        sendMessage(currentRoom, 'info', `${currentPlayer.name} 做多 ${futures.name} x${quantity}（名义价值 $${notional}，手续费 $${fee}）`)
+        // 实际冻结 = 名义价值 / 杠杆
+        const marginRequired = Math.ceil(notional / lev)
+        // 期货保证金只从存款扣（现金留给地皮交易）
+        if (currentPlayer.deposit < marginRequired + fee) {
+          socket.emit('error', { message: `存款不足：需冻结 $${marginRequired.toLocaleString()} + 手续费 $${fee}（请先到银行存款）` })
+          return
+        }
+        currentPlayer.deposit -= (marginRequired + fee)
+        const totalQty = holding.longQuantity + quantity
+        holding.longAvgCost = (holding.longAvgCost * holding.longQuantity + futures.price * futures.unit * quantity) / totalQty
+        holding.longQuantity = totalQty
+        holding.longFrozenCost += marginRequired
+        // 杠杆取最大值（保证账户安全）
+        if (lev > holding.longLeverage) holding.longLeverage = lev
+        holding.longOpenedOnDay = currentRoom.currentTurn
+        sendMessage(currentRoom, 'info',
+          `${currentPlayer.name} 做多开仓 ${futures.name} x${quantity}（${lev}x杠杆，冻结 $${marginRequired.toLocaleString()}，手续费 $${fee}，存款扣款）`)
         break
       }
 
       case 'sell': {
-        // 做空只冻结初始保证金，不再错误地扣除全部名义价值。
-        const initialMargin = Math.ceil(notional * FUTURES_INITIAL_MARGIN_RATE)
-        const requiredFunds = initialMargin + fee
-        if (!deductFunds(currentPlayer, requiredFunds, 'auto')) {
-          socket.emit('error', { message: `资金不足：初始保证金 $${initialMargin} + 手续费 $${fee}` })
+        // 开仓做空（看跌）：只冻结初始保证金 = notional × FUTURES_INITIAL_MARGIN_RATE / lev
+        if (futures.limitDown) {
+          socket.emit('error', { message: '该期货跌停，无法卖出开仓' })
           return
         }
-        holding.shortAvgCost = (holding.shortAvgCost * holding.shortQuantity + futures.price * futures.unit * quantity) / (holding.shortQuantity + quantity)
-        holding.shortQuantity += quantity
+        const initialMargin = Math.ceil(notional * FUTURES_INITIAL_MARGIN_RATE / lev)
+        const requiredFunds = initialMargin + fee
+        // 期货保证金只从存款扣
+        if (currentPlayer.deposit < requiredFunds) {
+          socket.emit('error', { message: `存款不足：初始保证金 $${initialMargin} + 手续费 $${fee}（请先到银行存款）` })
+          return
+        }
+        currentPlayer.deposit -= requiredFunds
+        const totalQty = holding.shortQuantity + quantity
+        holding.shortAvgCost = (holding.shortAvgCost * holding.shortQuantity + futures.price * futures.unit * quantity) / totalQty
+        holding.shortQuantity = totalQty
         holding.shortInitialMargin += initialMargin
         holding.shortMaintenanceMargin = futures.price * futures.unit * holding.shortQuantity * FUTURES_MAINTENANCE_MARGIN_RATE
-        sendMessage(currentRoom, 'info', `${currentPlayer.name} 做空 ${futures.name} x${quantity}（初始保证金 $${initialMargin}，维持保证金 $${Math.round(holding.shortMaintenanceMargin)}，手续费 $${fee}）`)
+        if (lev > holding.shortLeverage) holding.shortLeverage = lev
+        holding.shortOpenedOnDay = currentRoom.currentTurn
+        sendMessage(currentRoom, 'info',
+          `${currentPlayer.name} 做空开仓 ${futures.name} x${quantity}（${lev}x杠杆，初始保证金 $${initialMargin}，维持保证金 $${Math.round(holding.shortMaintenanceMargin)}，手续费 $${fee}，存款扣款）`)
         break
       }
 
       case 'close': {
+        // 平仓：先平多，再平空（按 quantity 拆分）
         if (holding.longQuantity === 0 && holding.shortQuantity === 0) {
           socket.emit('error', { message: '无持仓' })
           return
         }
-
-        let settlement = 0
-        if (holding.longQuantity > 0) {
-          const longNotional = futures.price * futures.unit * holding.longQuantity
-          const profit = (futures.price - holding.longAvgCost) * futures.unit * holding.longQuantity
-          settlement += holding.longAvgCost * futures.unit * holding.longQuantity + profit - Math.floor(longNotional * FUTURES_FEE_RATE)
-          sendMessage(currentRoom, 'info', `${currentPlayer.name} 平多 ${holding.longQuantity} 手 ${futures.name}：${profit >= 0 ? '获利' : '亏损'} $${Math.abs(Math.round(profit))}`)
+        if (futures.limitUp && holding.longQuantity > 0) {
+          socket.emit('error', { message: '该期货涨停，无法平多仓' })
+          return
         }
-        if (holding.shortQuantity > 0) {
-          const shortNotional = futures.price * futures.unit * holding.shortQuantity
-          const profit = (holding.shortAvgCost - futures.price) * futures.unit * holding.shortQuantity
-          settlement += holding.shortInitialMargin + profit - Math.floor(shortNotional * FUTURES_FEE_RATE)
-          sendMessage(currentRoom, 'info', `${currentPlayer.name} 平空 ${holding.shortQuantity} 手 ${futures.name}：${profit >= 0 ? '获利' : '亏损'} $${Math.abs(Math.round(profit))}`)
+        if (futures.limitDown && holding.shortQuantity > 0) {
+          socket.emit('error', { message: '该期货跌停，无法平空仓' })
+          return
+        }
+
+        let remain = quantity
+        let settlement = 0
+        if (holding.longQuantity > 0 && remain > 0) {
+          const qty = Math.min(remain, holding.longQuantity)
+          const longNotional = futures.price * futures.unit * qty
+          // 释放按比例冻结的资金
+          const frozenPerUnit = holding.longFrozenCost / holding.longQuantity
+          const releaseFrozen = qty * frozenPerUnit
+          const profit = (futures.price - holding.longAvgCost) * futures.unit * qty
+          settlement += releaseFrozen + profit - Math.floor(longNotional * FUTURES_FEE_RATE)
+          holding.longQuantity -= qty
+          holding.longFrozenCost -= releaseFrozen
+          if (holding.longQuantity === 0) {
+            holding.longAvgCost = 0
+            holding.longFrozenCost = 0
+            holding.longLeverage = 1
+          }
+          remain -= qty
+          sendMessage(currentRoom, 'info', `${currentPlayer.name} 平多 ${qty} 手 ${futures.name}：${profit >= 0 ? '获利' : '亏损'} $${Math.abs(Math.round(profit))}（冻结资金 $${Math.round(releaseFrozen).toLocaleString()} 返还）`)
+        }
+        if (holding.shortQuantity > 0 && remain > 0) {
+          const qty = Math.min(remain, holding.shortQuantity)
+          const shortNotional = futures.price * futures.unit * qty
+          const profit = (holding.shortAvgCost - futures.price) * futures.unit * qty
+          const initMarginPerUnit = holding.shortQuantity > 0
+            ? holding.shortInitialMargin / holding.shortQuantity
+            : 0
+          settlement += qty * initMarginPerUnit + profit - Math.floor(shortNotional * FUTURES_FEE_RATE)
+          holding.shortQuantity -= qty
+          holding.shortInitialMargin = Math.max(0, holding.shortInitialMargin - qty * initMarginPerUnit)
+          holding.shortMaintenanceMargin = futures.price * futures.unit * holding.shortQuantity * FUTURES_MAINTENANCE_MARGIN_RATE
+          if (holding.shortQuantity === 0) {
+            holding.shortAvgCost = 0
+            holding.shortInitialMargin = 0
+            holding.shortMaintenanceMargin = 0
+            holding.shortLeverage = 1
+          }
+          remain -= qty
+          sendMessage(currentRoom, 'info', `${currentPlayer.name} 平空 ${qty} 手 ${futures.name}：${profit >= 0 ? '获利' : '亏损'} $${Math.abs(Math.round(profit))}（初始保证金 $${Math.round(qty * initMarginPerUnit).toLocaleString()} 返还）`)
+        }
+        if (remain > 0) {
+          socket.emit('error', { message: `持仓不足，还差 ${remain} 手未平` })
+          return
         }
 
         if (settlement >= 0) {
@@ -2369,12 +3295,125 @@ io.on('connection', (socket) => {
           currentPlayer.isBankrupt = true
           sendMessage(currentRoom, 'error', `${currentPlayer.name} 期货平仓亏损超过可用资金，已破产`)
         }
-        holding.longQuantity = 0
-        holding.longAvgCost = 0
-        holding.shortQuantity = 0
-        holding.shortAvgCost = 0
-        holding.shortInitialMargin = 0
-        holding.shortMaintenanceMargin = 0
+        break
+      }
+
+      case 'delivery': {
+        // 实物交割：玩家主动申请
+        const matMap: Record<string, 'cement' | 'steel' | 'rubber'> = {
+          cement: 'cement', steel: 'steel', rubber: 'rubber'
+        }
+        const isPrecious = futures.category === 'precious'
+        if (!futures.isMaterial && !isPrecious) {
+          socket.emit('error', { message: '该期货不支持实物交割（仅建材/贵金属可交割）' })
+          return
+        }
+        if (holding.longQuantity === 0 && holding.shortQuantity === 0) {
+          socket.emit('error', { message: '无持仓可交割' })
+          return
+        }
+        // 多头：按当前价付款 → 获得实物
+        if (holding.longQuantity > 0) {
+          if (futures.isMaterial) {
+            const mat = matMap[futures.type]
+            // 释放冻结资金（按持仓平均）
+            const totalFrozen = holding.longFrozenCost
+            const settlement = totalFrozen
+            const cost = futures.price * futures.unit * holding.longQuantity
+            const profit = (futures.price - holding.longAvgCost) * futures.unit * holding.longQuantity
+            currentPlayer.materials[mat] += holding.longQuantity
+            currentPlayer.deposit += settlement + profit
+            sendMessage(currentRoom, 'success',
+              `${currentPlayer.name} 多头实物交割 ${holding.longQuantity} 手 ${futures.name}：获得 ${mat === 'cement' ? '水泥' : mat === 'steel' ? '钢材' : '橡胶'} ×${holding.longQuantity}（货款 $${cost.toLocaleString()}，获利 $${Math.round(profit).toLocaleString()}）`)
+          } else if (isPrecious) {
+            // 贵金属（黄金/白银/钻石）交割
+            const totalFrozen = holding.longFrozenCost
+            const profit = (futures.price - holding.longAvgCost) * futures.unit * holding.longQuantity
+            const settle = totalFrozen + profit
+            if (futures.type === 'gold') currentPlayer.materials.preciousMetals += holding.longQuantity
+            else if (futures.type === 'silver') currentPlayer.materials.preciousMetals += holding.longQuantity * 10  // 银换算为贵金属单位
+            else if (futures.type === 'diamond') currentPlayer.diamonds += holding.longQuantity
+            currentPlayer.deposit += settle
+            const itemName = futures.type === 'gold' ? '黄金' : futures.type === 'silver' ? '白银' : '钻石'
+            sendMessage(currentRoom, 'success',
+              `${currentPlayer.name} 多头实物交割 ${holding.longQuantity} 手 ${futures.name}：获得 ${itemName} ×${holding.longQuantity}（获利 $${Math.round(profit).toLocaleString()}）`)
+          }
+          holding.longQuantity = 0
+          holding.longAvgCost = 0
+          holding.longFrozenCost = 0
+          holding.longLeverage = 1
+        }
+        // 空头：交付实物 → 收到货款
+        if (holding.shortQuantity > 0) {
+          if (futures.isMaterial) {
+            const mat = matMap[futures.type]
+            const required = holding.shortQuantity
+            if (currentPlayer.materials[mat] < required) {
+              const shortage = required - currentPlayer.materials[mat]
+              // 实物违约处罚：扣除现金 + 信用降级（破产）
+              const penalty = (holding.shortInitialMargin + holding.shortQuantity * futures.price * futures.unit * 0.3) || 1000
+              deductFunds(currentPlayer, penalty, 'auto')
+              // 强制平空
+              const closeProfit = (holding.shortAvgCost - futures.price) * futures.unit * holding.shortQuantity
+              const shortNotional = futures.price * futures.unit * holding.shortQuantity
+              const release = holding.shortInitialMargin + closeProfit - Math.floor(shortNotional * FUTURES_FEE_RATE)
+              if (release >= 0) addFunds(currentPlayer, release, 'deposit')
+              holding.shortQuantity = 0
+              holding.shortAvgCost = 0
+              holding.shortInitialMargin = 0
+              holding.shortMaintenanceMargin = 0
+              holding.shortLeverage = 1
+              sendMessage(currentRoom, 'error',
+                `${currentPlayer.name} 空头交割违约！缺少 ${mat === 'cement' ? '水泥' : mat === 'steel' ? '钢材' : '橡胶'} ×${shortage}，处罚 $${Math.round(penalty).toLocaleString()} 并强制平仓`)
+              break
+            }
+            currentPlayer.materials[mat] -= required
+            const totalPaid = holding.shortInitialMargin
+            const profit = (holding.shortAvgCost - futures.price) * futures.unit * holding.shortQuantity
+            const received = futures.price * futures.unit * holding.shortQuantity
+            currentPlayer.deposit += totalPaid + received + profit
+            sendMessage(currentRoom, 'success',
+              `${currentPlayer.name} 空头实物交割 ${holding.shortQuantity} 手 ${futures.name}：交付 ${mat === 'cement' ? '水泥' : mat === 'steel' ? '钢材' : '橡胶'} ×${required}，收到货款 $${Math.round(received).toLocaleString()}（${profit >= 0 ? '获利' : '亏损'} $${Math.abs(Math.round(profit)).toLocaleString()}）`)
+          } else if (isPrecious) {
+            // 贵金属空头交割
+            let haveEnough = true
+            const needQty = holding.shortQuantity
+            if (futures.type === 'gold' && currentPlayer.materials.preciousMetals < needQty) haveEnough = false
+            if (futures.type === 'silver' && currentPlayer.materials.preciousMetals < needQty * 10) haveEnough = false
+            if (futures.type === 'diamond' && currentPlayer.diamonds < needQty) haveEnough = false
+            if (!haveEnough) {
+              const penalty = (holding.shortInitialMargin + holding.shortQuantity * futures.price * futures.unit * 0.3) || 1000
+              deductFunds(currentPlayer, penalty, 'auto')
+              const closeProfit = (holding.shortAvgCost - futures.price) * futures.unit * holding.shortQuantity
+              const shortNotional = futures.price * futures.unit * holding.shortQuantity
+              const release = holding.shortInitialMargin + closeProfit - Math.floor(shortNotional * FUTURES_FEE_RATE)
+              if (release >= 0) addFunds(currentPlayer, release, 'deposit')
+              holding.shortQuantity = 0
+              holding.shortAvgCost = 0
+              holding.shortInitialMargin = 0
+              holding.shortMaintenanceMargin = 0
+              holding.shortLeverage = 1
+              sendMessage(currentRoom, 'error',
+                `${currentPlayer.name} 空头贵金属交割违约，处罚 $${Math.round(penalty).toLocaleString()} 并强制平仓`)
+              break
+            }
+            if (futures.type === 'gold') currentPlayer.materials.preciousMetals -= needQty
+            else if (futures.type === 'silver') currentPlayer.materials.preciousMetals -= needQty * 10
+            else if (futures.type === 'diamond') currentPlayer.diamonds -= needQty
+            const totalPaid = holding.shortInitialMargin
+            const received = futures.price * futures.unit * holding.shortQuantity
+            const profit = (holding.shortAvgCost - futures.price) * futures.unit * holding.shortQuantity
+            currentPlayer.deposit += totalPaid + received + profit
+            const itemName = futures.type === 'gold' ? '黄金' : futures.type === 'silver' ? '白银' : '钻石'
+            sendMessage(currentRoom, 'success',
+              `${currentPlayer.name} 空头实物交割 ${holding.shortQuantity} 手 ${futures.name}：交付 ${itemName} ×${needQty}，收到货款 $${Math.round(received).toLocaleString()}`)
+          }
+          holding.shortQuantity = 0
+          holding.shortAvgCost = 0
+          holding.shortInitialMargin = 0
+          holding.shortMaintenanceMargin = 0
+          holding.shortLeverage = 1
+        }
         break
       }
     }
@@ -2383,8 +3422,191 @@ io.on('connection', (socket) => {
     if (currentRoom.mode === 'singleplayer') checkSingleplayerWin(currentRoom)
   })
 
-    // ============ 存款买钻石 ============
-    // 已移除（只能通过期货交易或地块获得钻石）
+  // ============ 购买同花顺软件（股票交易所售卖的永久道具） ============
+  socket.on('buyTonghuashun', () => {
+    if (!currentRoom) return
+    const currentPlayer = currentRoom.players[currentRoom.currentPlayerIndex]
+    if (!currentPlayer || currentPlayer.id !== socket.id) {
+      socket.emit('error', { message: '不是你的回合' })
+      return
+    }
+    if (!currentPlayer.atStockExchange) {
+      socket.emit('error', { message: '需要站在股票交易所才能购买' })
+      return
+    }
+    if (currentPlayer.hasTonghuashun) {
+      socket.emit('error', { message: '你已经拥有同花顺软件了' })
+      return
+    }
+    const price = 20_000_000
+    if (currentPlayer.cash + currentPlayer.deposit < price) {
+      socket.emit('error', { message: `资金不足（需 $${price.toLocaleString()}）` })
+      return
+    }
+    // 同花顺软件只能从存款中扣款
+    if (currentPlayer.deposit < price) {
+      socket.emit('error', { message: `存款不足（需 $${price.toLocaleString()}，请先到银行存款）` })
+      return
+    }
+    currentPlayer.deposit -= price
+    currentPlayer.hasTonghuashun = true
+    sendMessage(currentRoom, 'success',
+      `${currentPlayer.name} 购买 [同花顺软件]（$${price.toLocaleString()}），可在任意位置查看股票/期货的利好利空消息！`)
+    broadcastRoomState(currentRoom)
+  })
+
+  // ============ 期货交易所：兑换吸引力 ============
+  // 站在期货交易所，用现金换吸引力（1吸引力 = 2000 现金）
+  socket.on('exchangeAttraction', ({ amount }) => {
+    if (!currentRoom) return
+    const currentPlayer = currentRoom.players[currentRoom.currentPlayerIndex]
+    if (!currentPlayer || currentPlayer.id !== socket.id) {
+      socket.emit('error', { message: '不是你的回合' })
+      return
+    }
+    if (!currentPlayer.atFuturesExchange) {
+      socket.emit('error', { message: '需要站在期货交易所才能兑换' })
+      return
+    }
+    const qty = Math.floor(amount)
+    if (!qty || qty <= 0) {
+      socket.emit('error', { message: '请输入正整数' })
+      return
+    }
+    const cost = qty * 2000
+    if (currentPlayer.cash < cost) {
+      socket.emit('error', { message: `现金不足（需 $${cost.toLocaleString()}，当前 $${currentPlayer.cash.toLocaleString()}）` })
+      return
+    }
+    currentPlayer.cash -= cost
+    currentPlayer.attraction = (currentPlayer.attraction || 0) + qty
+    sendMessage(currentRoom, 'info',
+      `🛢️ ${currentPlayer.name} 在期货交易所用 $${cost.toLocaleString()} 兑换了 ${qty} 吸引力`)
+    broadcastRoomState(currentRoom)
+  })
+
+// ============ 房地产交易中心 - 拍卖出价 ============
+  socket.on('buyAuction', ({ cellId, bid }) => {
+    if (!currentRoom) return
+    const currentPlayer = currentRoom.players[currentRoom.currentPlayerIndex]
+    if (!currentPlayer || currentPlayer.id !== socket.id) {
+      socket.emit('error', { message: '不是你的回合' })
+      return
+    }
+    const cell = currentRoom.cells[cellId]
+    if (!cell || !cell.auctionActive) {
+      socket.emit('error', { message: '该地皮未在拍卖中' })
+      return
+    }
+    if (cell.auctionHighestBidder === currentPlayer.id) {
+      socket.emit('error', { message: '你已是最高出价者' })
+      return
+    }
+    const minBid = Math.floor((cell.auctionHighestBid || cell.auctionReservedPrice || 0) * 1.1)
+    if (bid < minBid) {
+      socket.emit('error', { message: `出价太低，至少 $${minBid.toLocaleString()}（当前最高 $${cell.auctionHighestBid}，需加10%）` })
+      return
+    }
+    if (currentPlayer.cash < bid) {
+      socket.emit('error', { message: `现金不足（需 $${bid.toLocaleString()}）` })
+      return
+    }
+    cell.auctionHighestBid = bid
+    cell.auctionHighestBidder = currentPlayer.id
+    sendMessage(currentRoom, 'info', `🔨 ${currentPlayer.name} 对 [${cell.name}] 出价 $${bid.toLocaleString()}`)
+    broadcastRoomState(currentRoom)
+  })
+
+  // ============ 玩家之间交易地皮 ============
+  socket.on('tradeProperty', ({ cellId, targetPlayerId, price }) => {
+    if (!currentRoom) return
+    const currentPlayer = currentRoom.players[currentRoom.currentPlayerIndex]
+    if (!currentPlayer || currentPlayer.id !== socket.id) {
+      socket.emit('error', { message: '不是你的回合' })
+      return
+    }
+    const cell = currentRoom.cells[cellId]
+    if (!cell || cell.owner !== currentPlayer.id) {
+      socket.emit('error', { message: '你必须拥有这块地皮才能交易' })
+      return
+    }
+    if (cell.fromAuction) {
+      socket.emit('error', { message: '拍卖地皮不可交易' })
+      return
+    }
+    const target = currentRoom.players.find(p => p.id === targetPlayerId)
+    if (!target || target.isBankrupt) {
+      socket.emit('error', { message: '目标玩家无效' })
+      return
+    }
+    if (price <= 0 || target.cash < price) {
+      socket.emit('error', { message: `价格无效或买家现金不足（需 $${(price || 0).toLocaleString()}）` })
+      return
+    }
+    target.cash -= price
+    currentPlayer.cash += price
+    cell.owner = target.id
+    currentPlayer.properties = currentPlayer.properties.filter(id => id !== cellId)
+    if (!target.properties.includes(cellId)) target.properties.push(cellId)
+    sendMessage(currentRoom, 'success', `🤝 ${currentPlayer.name} 将 [${cell.name}] 以 $${price.toLocaleString()} 卖给 ${target.name}`)
+    broadcastRoomState(currentRoom)
+  })
+
+  // ============ 占用卡：抢占地皮（200钻石，顶以下任意地皮） ============
+  socket.on('useSeizeCard', ({ cardName, cellId }) => {
+    if (!currentRoom) return
+    const currentPlayer = currentRoom.players[currentRoom.currentPlayerIndex]
+    if (!currentPlayer || currentPlayer.id !== socket.id) {
+      socket.emit('error', { message: '不是你的回合' })
+      return
+    }
+    // 200 钻石
+    if ((currentPlayer.diamonds || 0) < 200) {
+      socket.emit('error', { message: `钻石不足（需 200 💎，当前 ${currentPlayer.diamonds || 0}）` })
+      return
+    }
+    let targetCell: Cell | undefined
+    if (cellId !== undefined && cellId !== null) {
+      targetCell = currentRoom.cells[cellId]
+      if (!targetCell || targetCell.type !== 'empty') {
+        socket.emit('error', { message: '该格不可占用' })
+        return
+      }
+      if (targetCell.level >= 4) {
+        socket.emit('error', { message: '顶级的地皮不可占用' })
+        return
+      }
+      if (targetCell.owner === currentPlayer.id) {
+        socket.emit('error', { message: '这已经是你的地了' })
+        return
+      }
+    } else {
+      targetCell = currentRoom.cells.find(c => c.type === 'empty' && c.owner && c.owner !== currentPlayer.id && c.level < 4)
+      if (!targetCell) {
+        socket.emit('error', { message: '没有可占用的地皮（必须非顶级）' })
+        return
+      }
+    }
+    currentPlayer.diamonds -= 200
+    // 原主人失去
+    if (targetCell.owner) {
+      const oldOwner = currentRoom.players.find(p => p.id === targetCell!.owner)
+      if (oldOwner) {
+        oldOwner.properties = oldOwner.properties.filter(id => id !== targetCell!.id)
+        sendMessage(currentRoom, 'warning', `😱 ${oldOwner.name} 的 [${targetCell.name}] 被 ${currentPlayer.name} 抢占！`)
+      }
+    }
+    targetCell.owner = currentPlayer.id
+    targetCell.level = 0
+    targetCell.price = targetCell.basePrice
+    targetCell.visitCount = 0
+    if (!currentPlayer.properties.includes(targetCell.id)) currentPlayer.properties.push(targetCell.id)
+    sendMessage(currentRoom, 'success', `💎 ${currentPlayer.name} 用 200💎 占用 [${targetCell.name}] 成功！`)
+    broadcastRoomState(currentRoom)
+  })
+
+  // ============ 存款买钻石 ============
+  // 已移除（只能通过期货交易或地块获得钻石）
 
   socket.on('disconnect', () => {
     console.log('Client disconnected:', socket.id)

@@ -1,10 +1,10 @@
-import { useState, useMemo, useEffect } from 'react'
+import { useState, useMemo, useEffect, memo } from 'react'
 import { useGameStore, Stock, KLine } from '../store/gameStore'
 import { createPortal } from 'react-dom'
 import ReactECharts from 'echarts-for-react'
 
 // ECharts K线 + MA + MACD + 成交量
-function StockChart({ stock }: { stock: Stock }) {
+const StockChart = memo(function StockChart({ stock }: { stock: Stock }) {
   const closes = stock.history.map(h => h.close)
   const volumes = stock.history.map(h => h.volume)
   const category = stock.history.map((_, i) => `D${i + 1}`)
@@ -60,7 +60,7 @@ function StockChart({ stock }: { stock: Stock }) {
   const candleData = stock.history.map(h => [h.open, h.close, h.low, h.high])
   const volumeColors = stock.history.map(h => h.close >= h.open ? '#ef4444' : '#22c55e')
 
-  const option = {
+  const option = useMemo(() => ({
     animation: false,
     backgroundColor: 'transparent',
     tooltip: {
@@ -138,7 +138,7 @@ function StockChart({ stock }: { stock: Stock }) {
       { name: 'DIF', type: 'line', data: macdData.dif, xAxisIndex: 2, yAxisIndex: 2, smooth: true, lineStyle: { width: 1, color: '#fbbf24' }, showSymbol: false },
       { name: 'DEA', type: 'line', data: macdData.dea, xAxisIndex: 2, yAxisIndex: 2, smooth: true, lineStyle: { width: 1, color: '#60a5fa' }, showSymbol: false }
     ]
-  }
+  }), [closes.length, stock.symbol, stock.eventDesc])
 
   return (
     <ReactECharts
@@ -148,7 +148,7 @@ function StockChart({ stock }: { stock: Stock }) {
       lazyUpdate={false}
     />
   )
-}
+})
 
 export default function StockPanel() {
   const { stocks, socket, players, myPlayerId } = useGameStore()
@@ -181,6 +181,14 @@ export default function StockPanel() {
     setQuantity(1)
   }
 
+  const handleBuyTonghuashun = () => {
+    socket?.emit('buyTonghuashun')
+  }
+
+  const canViewNews = myPlayer?.hasTonghuashun || myPlayer?.atStockExchange
+  const showTonghuashunButton = myPlayer && !myPlayer.hasTonghuashun && myPlayer.atStockExchange && isMyTurn
+  const tonghuashunPrice = 20_000_000
+
   const formatChange = (change: number) => {
     const prefix = change >= 0 ? '+' : ''
     return `${prefix}${change.toFixed(2)}%`
@@ -210,11 +218,12 @@ export default function StockPanel() {
             <div className="flex items-center gap-2">
               <span className="text-xl">📈</span>
               <span className="text-sm font-bold">股票市场</span>
+              {myPlayer?.hasTonghuashun && <span className="text-[10px] bg-blue-600 text-white px-1.5 py-0.5 rounded">📱同花顺</span>}
             </div>
-            <span className="text-gray-400 text-xs">点击展开 →</span>
+            <span className="text-gray-400 text-xs">{myPlayer?.atStockExchange ? '🏛️在交易所' : '点击展开 →'}</span>
           </div>
           <div className="flex gap-2 mt-1 overflow-x-auto">
-            {stocks.slice(0, 8).map(s => (
+            {stocks.slice(0, 6).map(s => (
               <div key={s.symbol} className={`text-[10px] px-1.5 py-0.5 rounded whitespace-nowrap ${s.change >= 0 ? 'bg-green-900/50 text-green-400' : 'bg-red-900/50 text-red-400'}`}>
                 {s.name} {s.change >= 0 ? '+' : ''}{s.change.toFixed(1)}%
               </div>
@@ -230,9 +239,34 @@ export default function StockPanel() {
         >
           <div
             style={{ width: '1100px', height: '700px', maxWidth: '95vw', maxHeight: '92vh' }}
-            className="bg-secondary rounded-xl shadow-2xl flex overflow-hidden"
+            className="bg-secondary rounded-xl shadow-2xl flex flex-col overflow-hidden"
             onClick={e => e.stopPropagation()}
           >
+            {/* 顶部 Tonghuashun 横幅（醒目位置） */}
+            {showTonghuashunButton && (
+              <div className="bg-gradient-to-r from-blue-700 to-blue-900 px-4 py-2 flex items-center justify-between border-b-2 border-yellow-400">
+                <div className="flex items-center gap-2 text-white">
+                  <span className="text-xl">📱</span>
+                  <div>
+                    <div className="text-sm font-bold">🏛️ 股票交易所特供：同花顺软件</div>
+                    <div className="text-[10px] text-blue-200">购买后可永久查看所有股票/期货利好利空消息（无需每次到交易所）</div>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={handleBuyTonghuashun}
+                  className="px-4 py-2 bg-yellow-500 hover:bg-yellow-400 text-blue-900 text-sm font-bold rounded shadow-lg"
+                >
+                  购买 (${tonghuashunPrice.toLocaleString()})
+                </button>
+              </div>
+            )}
+            {myPlayer?.hasTonghuashun && (
+              <div className="bg-blue-900/50 px-4 py-1 text-xs text-blue-200 border-b border-blue-700">
+                ✅ 已装备 [同花顺软件]，所有股票/期货利好利空消息自动可见
+              </div>
+            )}
+            <div className="flex-1 flex overflow-hidden">
             {/* 左侧：板块 */}
             <div className="w-32 bg-primary/50 border-r border-gray-700 flex flex-col flex-shrink-0">
               <div className="p-2 border-b border-gray-700 text-xs text-gray-400">板块</div>
@@ -261,16 +295,22 @@ export default function StockPanel() {
                 <div className="text-right">现价</div>
                 <div className="text-right">涨跌</div>
                 <div className="text-right">状态</div>
-                <div className="text-right">我的</div>
+                <div className="text-right">持仓</div>
               </div>
 
               <div className="flex-1 overflow-y-auto">
                 {filteredStocks.map(stock => {
                   const h = myPlayer?.stocks.find(s => s.symbol === stock.symbol)
-                  const allH = players.reduce((sum, p) => {
-                    const ph = p.stocks.find(s => s.symbol === stock.symbol)
-                    return sum + (ph?.quantity || 0) + (ph?.shortQuantity || 0)
-                  }, 0)
+                  // 统计每个玩家持仓（多 + 空）
+                  const playerHoldings = players
+                    .map(p => {
+                      const ph = p.stocks.find(s => s.symbol === stock.symbol)
+                      return ph && (ph.quantity > 0 || (ph.shortQuantity || 0) > 0)
+                        ? { player: p, holding: ph }
+                        : null
+                    })
+                    .filter(Boolean) as { player: typeof players[0]; holding: NonNullable<ReturnType<typeof players[0]['stocks']['find']>> }[]
+                  const allH = playerHoldings.reduce((sum, x) => sum + (x.holding.quantity || 0) + (x.holding.shortQuantity || 0), 0)
                   return (
                     <div
                       key={stock.symbol}
@@ -290,16 +330,38 @@ export default function StockPanel() {
                         {formatChange(stock.change)}
                       </div>
                       <div className="text-right">
-                        {stock.isNoManipulator && <span className="text-purple-400" title="反操盘期">🚫</span>}
-                        {stock.isConsolidating && <span className="text-yellow-400 ml-0.5" title="横盘期">⏸️</span>}
-                        {stock.eventDesc !== '无重大事件' && <span className="text-orange-400 ml-0.5" title={stock.eventDesc}>📢</span>}
+                        {stock.isNoManipulator && <span className="text-purple-400">🚫</span>}
+                        {stock.isConsolidating && <span className="text-yellow-400 ml-0.5">⏸️</span>}
+                        {stock.eventDesc !== '无重大事件' && (
+                          canViewNews
+                            ? <span className="text-orange-400 ml-0.5">📢</span>
+                            : <span className="text-gray-500 ml-0.5">🔒</span>
+                        )}
                         {stock.limitUp && <span className="text-orange-400 ml-0.5">涨停</span>}
                         {stock.limitDown && <span className="text-blue-400 ml-0.5">跌停</span>}
                         <span className="text-gray-500 text-[10px] ml-1">×{allH}</span>
                       </div>
                       <div className="text-right">
-                        {(h?.quantity || 0) > 0 && <span className="text-green-400">多{h?.quantity}</span>}
-                        {(h?.shortQuantity || 0) > 0 && <span className="text-orange-400 ml-1">空{h?.shortQuantity}</span>}
+                        {playerHoldings.length === 0 ? (
+                          <span className="text-gray-600 text-[10px]">无人持仓</span>
+                        ) : (
+                          <div className="flex flex-wrap gap-1 justify-end">
+                            {playerHoldings.map(({ player, holding }) => (
+                              <span
+                                key={player.id}
+                                className="text-[9px] px-1 py-0.5 rounded whitespace-nowrap"
+                                style={{
+                                  backgroundColor: `${player.color}33`,
+                                  borderLeft: `2px solid ${player.color}`
+                                }}
+                              >
+                                <span className="font-bold" style={{ color: player.color }}>{player.name}</span>
+                                {holding.quantity > 0 && <span className="text-green-400 ml-1">多{holding.quantity}</span>}
+                                {(holding.shortQuantity || 0) > 0 && <span className="text-orange-400 ml-1">空{holding.shortQuantity}</span>}
+                              </span>
+                            ))}
+                          </div>
+                        )}
                       </div>
                     </div>
                   )
@@ -308,7 +370,27 @@ export default function StockPanel() {
 
               {selectedStock?.news && (
                 <div className="p-2 bg-primary/30 border-t border-gray-700 text-xs text-yellow-400">
-                  {selectedStock.news}
+                  {canViewNews ? (
+                    <>📰 {selectedStock.news}</>
+                  ) : (
+                    <>🔒 有利好/利空消息（前往股票交易所或购买同花顺软件查看）</>
+                  )}
+                </div>
+              )}
+              {showTonghuashunButton && (
+                <div className="p-2 bg-primary/30 border-t border-gray-700">
+                  <button
+                    type="button"
+                    onClick={handleBuyTonghuashun}
+                    className="w-full py-2 bg-gradient-to-r from-blue-600 to-blue-800 hover:from-blue-700 hover:to-blue-900 text-white text-xs font-bold rounded"
+                  >
+                    📱 购买同花顺软件 ($${tonghuashunPrice.toLocaleString()}) — 永久查看所有股票/期货消息
+                  </button>
+                </div>
+              )}
+              {myPlayer?.hasTonghuashun && (
+                <div className="p-2 bg-blue-900/30 border-t border-gray-700 text-xs text-blue-300">
+                  ✅ 已装备 [同花顺软件]，可在任意位置查看消息
                 </div>
               )}
             </div>
@@ -334,7 +416,11 @@ export default function StockPanel() {
                       {selectedStock.sector} · {selectedStock.symbol} · 基础价 ${selectedStock.base}
                     </div>
                     {selectedStock.eventDesc !== '无重大事件' && (
-                      <div className="text-xs text-orange-400 mt-1">📢 {selectedStock.eventDesc} ({selectedStock.eventDays}天)</div>
+                      canViewNews ? (
+                        <div className="text-xs text-orange-400 mt-1">📢 {selectedStock.eventDesc} ({selectedStock.eventDays}天)</div>
+                      ) : (
+                        <div className="text-xs text-gray-500 mt-1">🔒 有事件（前往股票交易所或购买同花顺软件查看）</div>
+                      )
                     )}
                     {selectedStock.isConsolidating && (
                       <div className="text-xs text-yellow-400 mt-1">⏸️ 横盘期 {selectedStock.consolidateDays}天</div>
@@ -351,19 +437,71 @@ export default function StockPanel() {
                   <div>
                     <div className="text-[10px] text-gray-400 mb-1">玩家持仓 ({allHoldings.length})</div>
                     {allHoldings.length > 0 ? (
-                      <div className="space-y-1 max-h-24 overflow-y-auto">
-                        {allHoldings.map(({ player, holding }) => (
-                          <div key={player.id} className="flex items-center justify-between text-[10px] bg-black/30 rounded px-2 py-1">
-                            <div className="flex items-center gap-1">
-                              <div className="w-2 h-2 rounded-full" style={{ backgroundColor: player.color }} />
-                              <span className={player.id === myPlayerId ? 'text-accent' : 'text-gray-300'}>{player.name}</span>
+                      <div className="space-y-1 max-h-40 overflow-y-auto">
+                        {allHoldings.map(({ player, holding }) => {
+                          const longPnl = holding.quantity > 0
+                            ? (selectedStock.price - holding.avgCost) * holding.quantity
+                            : 0
+                          const shortPnl = (holding.shortQuantity || 0) > 0
+                            ? ((holding.shortAvgCost || 0) - selectedStock.price) * (holding.shortQuantity || 0)
+                            : 0
+                          const isMe = player.id === myPlayerId
+                          const shrQty = holding.shortQuantity || 0
+                          const shortNotional = selectedStock.price * shrQty
+                          const shortInitialMargin = holding.shortMarginFrozen || shortNotional * 0.5
+                          const shortUnrealizedLoss = ((holding.shortAvgCost || 0) - selectedStock.price) * shrQty
+                          const shortAvailable = shortInitialMargin + shortUnrealizedLoss
+                          const shortMaintenance = shortNotional * 0.3
+                          const shortHealth = shortMaintenance > 0 ? shortAvailable / shortMaintenance : 1
+                          const shortIsDanger = shortHealth < 1.5
+                          const shortIsCritical = shortHealth < 1.0
+                          return (
+                            <div
+                              key={player.id}
+                              className={`bg-black/30 rounded px-1.5 py-1 text-[10px] border ${
+                                isMe ? 'border-accent/50' : 'border-gray-700'
+                              } ${shrQty > 0 ? 'border-l-2 border-l-orange-400' : ''}`}
+                            >
+                              <div className="flex items-center justify-between">
+                                <div className="flex items-center gap-1">
+                                  <div className="w-2 h-2 rounded-full" style={{ backgroundColor: player.color }} />
+                                  <span className={isMe ? 'text-accent font-bold' : 'text-gray-300'}>{player.name}</span>
+                                  {isMe && <span className="text-[9px] text-gray-500">(我)</span>}
+                                </div>
+                                <div className="flex gap-2">
+                                  {holding.quantity > 0 && <span className="text-green-400">多{holding.quantity}</span>}
+                                  {shrQty > 0 && <span className="text-orange-400">空{shrQty}</span>}
+                                </div>
+                              </div>
+                              {holding.quantity > 0 && (
+                                <div className="flex justify-between text-[9px] mt-0.5">
+                                  <span className="text-gray-500">多成本 ${holding.avgCost.toFixed(2)}</span>
+                                  <span className={longPnl >= 0 ? 'text-green-400' : 'text-red-400'}>
+                                    盈亏 {longPnl >= 0 ? '+' : ''}${longPnl.toFixed(0)}
+                                  </span>
+                                </div>
+                              )}
+                              {shrQty > 0 && (
+                                <div className="text-[9px] mt-0.5">
+                                  <div className="flex justify-between">
+                                    <span className="text-gray-500">空成本 ${(holding.shortAvgCost || 0).toFixed(2)}</span>
+                                    <span className={shortPnl >= 0 ? 'text-green-400' : 'text-red-400'}>
+                                      盈亏 {shortPnl >= 0 ? '+' : ''}${shortPnl.toFixed(0)}
+                                    </span>
+                                  </div>
+                                  <div className="flex justify-between">
+                                    <span className="text-gray-500">健康度</span>
+                                    <span className={shortIsCritical ? 'text-red-400 font-bold' : shortIsDanger ? 'text-orange-400' : 'text-green-400'}>
+                                      {(shortHealth * 100).toFixed(0)}%
+                                      {shortIsCritical && ' 🚨'}
+                                      {shortIsDanger && !shortIsCritical && ' ⚠️'}
+                                    </span>
+                                  </div>
+                                </div>
+                              )}
                             </div>
-                            <div className="flex gap-2">
-                              {holding.quantity > 0 && <span className="text-green-400">多{holding.quantity}</span>}
-                              {(holding.shortQuantity || 0) > 0 && <span className="text-orange-400">空{holding.shortQuantity}</span>}
-                            </div>
-                          </div>
-                        ))}
+                          )
+                        })}
                       </div>
                     ) : (
                       <div className="text-xs text-gray-500">无人持仓</div>
@@ -475,7 +613,10 @@ export default function StockPanel() {
                     )}
 
                     <div className="bg-black/30 rounded p-2 text-[10px] space-y-0.5">
-                      {action === 'buy' && <div>💰 需支付: <span className="text-red-400">${(selectedStock.price * quantity * leverage).toLocaleString()}</span></div>}
+                      {action === 'buy' && <>
+                        <div>💰 需支付(从存款): <span className="text-red-400">${(selectedStock.price * quantity * leverage).toLocaleString()}</span></div>
+                        <div className="text-gray-500">现金留给地皮交易</div>
+                      </>}
                       {action === 'sell' && <div>💵 获得: <span className="text-green-400">${(selectedStock.price * quantity).toLocaleString()}</span> → 存款</div>}
                       {action === 'short' && <>
                         <div>💵 获得现金: <span className="text-green-400">${(selectedStock.price * quantity).toLocaleString()}</span></div>
@@ -507,6 +648,7 @@ export default function StockPanel() {
                   点击左侧股票查看详情
                 </div>
               )}
+            </div>
             </div>
           </div>
         </div>,

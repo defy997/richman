@@ -1,0 +1,175 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:vm="using:Richman.Client.ViewModels"
+             mc:Ignorable="d" d:DesignWidth="320" d:DesignHeight="600"
+             x:Class="Richman.Client.Views.BankView"
+             x:DataType="vm:BankViewModel">
+
+    <Design.DataContext>
+        <vm:BankViewModel />
+    </Design.DataContext>
+
+    <Border Background="#1f2937" Padding="12" CornerRadius="8">
+        <DockPanel LastChildFill="True">
+            <TextBlock DockPanel.Dock="Top" Text="🏦 平安银行" FontWeight="Bold"
+                       Foreground="#fbbf24" FontSize="16" Margin="0,0,0,8"/>
+
+            <!-- 未在银行: 提示 -->
+            <Border DockPanel.Dock="Top" Background="#7f1d1d" Padding="8"
+                    CornerRadius="4" IsVisible="{Binding !AtBank}" Margin="0,0,0,8">
+                <TextBlock Foreground="#fecaca" FontSize="11" TextWrapping="Wrap"
+                           Text="💡 需站在 🏦 平安银行 格子上才能使用银行服务"/>
+            </Border>
+
+            <!-- 我的财务概览 -->
+            <Border DockPanel.Dock="Top" Background="#0b1220" Padding="10"
+                    CornerRadius="4" Margin="0,0,0,8">
+                <Grid ColumnDefinitions="*,*" RowDefinitions="Auto,Auto">
+                    <TextBlock Grid.Row="0" Grid.Column="0" Foreground="#9ca3af" FontSize="11"
+                               Text="💰 现金"/>
+                    <TextBlock Grid.Row="1" Grid.Column="0" Foreground="#86efac" FontSize="14"
+                               FontWeight="Bold" Text="{Binding Cash, StringFormat='${0:N0}'}"/>
+
+                    <TextBlock Grid.Row="0" Grid.Column="1" Foreground="#9ca3af" FontSize="11"
+                               Text="🏦 存款"/>
+                    <TextBlock Grid.Row="1" Grid.Column="1" Foreground="#93c5fd" FontSize="14"
+                               FontWeight="Bold" Text="{Binding Deposit, StringFormat='${0:N0}'}"/>
+                </Grid>
+            </Border>
+
+            <ScrollViewer>
+                <StackPanel Spacing="10">
+
+                    <!-- 存款 -->
+                    <Border Background="#0b1220" Padding="10" CornerRadius="4">
+                        <StackPanel Spacing="6">
+                            <TextBlock Foreground="#86efac" FontWeight="Bold" FontSize="13"
+                                       Text="💵 存款 (1% 手续费)"/>
+                            <Grid ColumnDefinitions="*,Auto">
+                                <NumericUpDown Grid.Column="0" Minimum="0" Maximum="99999999"
+                                               Value="{Binding DepositAmount}" FormatString="N0"/>
+                            </Grid>
+                            <StackPanel Orientation="Horizontal" Spacing="4">
+                                <Button Content="+1k" Click="OnQuickAmount5k"/>
+                                <Button Content="+5k" Click="OnQuickAmount5k"/>
+                                <Button Content="+10k" Click="OnQuickAmount10k"/>
+                                <Button Content="MAX" Click="OnMaxAmount"/>
+                            </StackPanel>
+                            <TextBlock Foreground="#fca5a5" FontSize="10"
+                                       Text="(MAX = 当前现金)"/>
+                            <Button Content="存款" Command="{Binding DoDepositCommand}"
+                                    IsEnabled="{Binding CanDeposit}" Background="#16a34a"
+                                    HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"/>
+                        </StackPanel>
+                    </Border>
+
+                    <!-- 取款 -->
+                    <Border Background="#0b1220" Padding="10" CornerRadius="4">
+                        <StackPanel Spacing="6">
+                            <TextBlock Foreground="#93c5fd" FontWeight="Bold" FontSize="13"
+                                       Text="💵 取款 (1% 手续费)"/>
+                            <NumericUpDown Minimum="0" Maximum="99999999"
+                                           Value="{Binding WithdrawAmount}" FormatString="N0"/>
+                            <Button Content="取款" Command="{Binding DoWithdrawCommand}"
+                                    IsEnabled="{Binding CanWithdraw}" Background="#0891b2"
+                                    HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"/>
+                        </StackPanel>
+                    </Border>
+
+                    <!-- 现金 ↔ 存款 互转 -->
+                    <Border Background="#0b1220" Padding="10" CornerRadius="4">
+                        <StackPanel Spacing="6">
+                            <TextBlock Foreground="#c4b5fd" FontWeight="Bold" FontSize="13"
+                                       Text="🔁 现金 ↔ 存款 互转"/>
+                            <StackPanel Orientation="Horizontal" Spacing="4">
+                                <Button Content="现金 → 存款" Command="{Binding ConvertCashToDepositCommand}"
+                                        IsEnabled="{Binding CanConvertCashToDeposit}"
+                                        Background="#7c3aed" HorizontalAlignment="Stretch"
+                                        HorizontalContentAlignment="Center"/>
+                                <Button Content="存款 → 现金" Command="{Binding ConvertDepositToCashCommand}"
+                                        IsEnabled="{Binding CanConvertDepositToCash}"
+                                        Background="#7c3aed" HorizontalAlignment="Stretch"
+                                        HorizontalContentAlignment="Center"/>
+                            </StackPanel>
+                            <TextBlock Foreground="#9ca3af" FontSize="10" TextWrapping="Wrap"
+                                       Text="金额取存款/取款输入框"/>
+                        </StackPanel>
+                    </Border>
+
+                    <!-- 贷款 -->
+                    <Border Background="#0b1220" Padding="10" CornerRadius="4">
+                        <StackPanel Spacing="6">
+                            <TextBlock Foreground="#fbbf24" FontWeight="Bold" FontSize="13"
+                                       Text="💳 贷款"/>
+                            <TextBlock Foreground="#9ca3af" FontSize="11">
+                                <Run Text="可贷额度:" />
+                                <Run Text="{Binding MaxLoan, StringFormat='${0:N0}'}"
+                                     Foreground="#fde68a" FontWeight="Bold"/>
+                                <Run Text="(房产估值 × 10)" />
+                            </TextBlock>
+                            <TextBlock Foreground="#fca5a5" FontSize="10"
+                                       IsVisible="{Binding MaxLoan, Converter={x:Static ObjectConverters.IsNotNull}}"
+                                       Text="(无房产时为 0)"/>
+                            <NumericUpDown Minimum="0" Maximum="999999999"
+                                           Value="{Binding LoanAmount}" FormatString="N0"/>
+                            <Button Content="贷款" Command="{Binding TakeLoanCommand}"
+                                    IsEnabled="{Binding CanTakeLoan}" Background="#b45309"
+                                    HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"/>
+                            <TextBlock Foreground="#9ca3af" FontSize="10"
+                                       Text="月利率 5%,30 回合到期,可随时还款"/>
+                        </StackPanel>
+                    </Border>
+
+                    <!-- 我的贷款列表 -->
+                    <Border Background="#0b1220" Padding="10" CornerRadius="4">
+                        <StackPanel Spacing="6">
+                            <TextBlock Foreground="#fbbf24" FontWeight="Bold" FontSize="13"
+                                       Text="📋 我的贷款"/>
+                            <ItemsControl ItemsSource="{Binding Loans}">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate>
+                                        <Border Background="#1f2937" Padding="6" CornerRadius="4"
+                                                Margin="0,2">
+                                            <Grid ColumnDefinitions="*,Auto" RowDefinitions="Auto,Auto">
+                                                <TextBlock Grid.Row="0" Grid.Column="0"
+                                                           Foreground="White" FontSize="12">
+                                                    <Run Text="💳 $"/>
+                                                </TextBlock>
+                                                <TextBlock Grid.Row="0" Grid.Column="0"
+                                                           Margin="36,0,0,0"
+                                                           Foreground="White" FontSize="12"
+                                                           FontWeight="Bold"
+                                                           Text="{Binding Amount, StringFormat={}{0:N0}}"/>
+                                                <TextBlock Grid.Row="1" Grid.Column="0"
+                                                           Foreground="#9ca3af" FontSize="10">
+                                                    <Run Text="剩余 "/>
+                                                    <Run Text="{Binding TurnsRemaining}"
+                                                         Foreground="#cbd5e1" FontWeight="Bold"/>
+                                                    <Run Text=" 回合到期 · 利率 "/>
+                                                    <Run Text="{Binding InterestRate, StringFormat={}{0:P1}}"
+                                                         Foreground="#fca5a5"/>
+                                                </TextBlock>
+                                                <Button Grid.Row="0" Grid.RowSpan="2" Grid.Column="1"
+                                                        Content="还款"
+                                                        Background="#16a34a"
+                                                        Command="{Binding $parent[ItemsControl].((vm:BankViewModel)DataContext).RepayLoanCommand}"
+                                                        CommandParameter="{Binding Id}"
+                                                        VerticalAlignment="Center"
+                                                        Padding="8,2"/>
+                                            </Grid>
+                                        </Border>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                            <TextBlock Foreground="#6b7280" FontSize="10"
+                                       Text="(无贷款)"
+                                       IsVisible="{Binding Loans.Count, Converter={x:Static ObjectConverters.Equal}, ConverterParameter=0}"/>
+                        </StackPanel>
+                    </Border>
+                </StackPanel>
+            </ScrollViewer>
+        </DockPanel>
+    </Border>
+</UserControl>
