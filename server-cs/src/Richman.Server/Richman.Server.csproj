@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <RootNamespace>Richman.Server</RootNamespace>
+    <AssemblyName>Richman.Server</AssemblyName>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Socket.IO v3+ 兼容服务端 (支持 Engine.IO v4) -->
+    <PackageReference Include="SocketIO.Server" Version="3.0.1" />
+    <PackageReference Include="Microsoft.AspNetCore.WebSockets" Version="8.0.0" />
+  </ItemGroup>
+
+</Project>

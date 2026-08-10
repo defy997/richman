@@ -13,10 +13,11 @@ using System.Reactive.Subjects;
 using SocketIOClient;
 using SocketIOClient.Transport;
 using SioSocket = SocketIOClient.SocketIO;
+using Richman.Client.Services;
 
 namespace Richman.Client.Net;
 
-public sealed class GameClient : IDisposable
+public sealed class GameClient : IGameTransport, IDisposable
 {
     private SioSocket? _socket;
     private readonly Subject<GameStateDto?> _state = new();
@@ -26,13 +27,18 @@ public sealed class GameClient : IDisposable
     private bool _disposed;
 
     // ---------- Reactive State ----------
+    IObservable<GameStateDto?>   IGameTransport.StateStream   => _state.AsObservable();
+    IObservable<(string,string)> IGameTransport.MessageStream => _message.AsObservable();
+    IObservable<string>          IGameTransport.ErrorStream   => _error.AsObservable();
+    IObservable<RumorReportDto>  IGameTransport.RumorStream   => _rumor.AsObservable();
+
     public IObservable<GameStateDto?>   StateStream   => _state.AsObservable();
     public IObservable<(string,string)> MessageStream => _message.AsObservable();
     public IObservable<string>          ErrorStream   => _error.AsObservable();
     public IObservable<RumorReportDto>  RumorStream   => _rumor.AsObservable();
 
     public bool   IsConnected  { get; private set; }
-    public string ServerUrl    { get; private set; } = "http://localhost:3000";
+    public string ServerUrl    { get; set; } = "http://localhost:3000";
     public string? MyPlayerId  { get; private set; }
     public string? RoomCode    { get; private set; }
     public GameStateDto? CurrentState { get; private set; }

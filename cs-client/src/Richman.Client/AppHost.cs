@@ -16,8 +16,11 @@ public static class AppHost
     {
         var services = new ServiceCollection();
 
-        services.AddSingleton<GameClient>();
+        services.AddSingleton<IGameTransport, LocalGameEngine>();
         services.AddSingleton<GameStore>();
+
+        // 注册 LocalGameEngine 实例 (供 Smoke 直接调用)
+        services.AddSingleton(sp => (LocalGameEngine)sp.GetRequiredService<IGameTransport>());
 
         services.AddSingleton<ViewModels.MainViewModel>();
         services.AddSingleton<ViewModels.LobbyViewModel>();

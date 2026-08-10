@@ -17,9 +17,9 @@ namespace Richman.Client.Services;
 
 public sealed partial class GameStore : ObservableObject
 {
-    private readonly GameClient _client;
+    private readonly IGameTransport _client;
 
-    public GameStore(GameClient client)
+    public GameStore(IGameTransport client)
     {
         _client = client;
         _client.StateStream.Subscribe(OnState);

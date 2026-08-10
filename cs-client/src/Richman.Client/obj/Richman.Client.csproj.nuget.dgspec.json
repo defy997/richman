@@ -10,7 +10,7 @@
         "projectUniqueName": "/root/richman/cs-client/src/Richman.Client/Richman.Client.csproj",
         "projectName": "Richman.Client",
         "projectPath": "/root/richman/cs-client/src/Richman.Client/Richman.Client.csproj",
-        "packagesPath": "/root/.nuget/packages/",
+        "packagesPath": "/tmp/cursor-sandbox-cache/ff27d08d437319b04246cd50f1da34e8/nuget",
         "outputPath": "/root/richman/cs-client/src/Richman.Client/obj/",
         "projectStyle": "PackageReference",
         "configFilePaths": [

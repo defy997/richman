@@ -1,65 +1,29 @@
-﻿using System;
-using System.Threading.Tasks;
+﻿// =============================================================================
+// Program.cs (GUI 入口 + Smoke 模式)
+// =============================================================================
 using Avalonia;
+using Richman.Client.Smoke;
 
 namespace Richman.Client;
 
-sealed class Program
+internal static class Program
 {
-    [STAThread]
-    public static void Main(string[] args)
+    public static async Task<int> Main(string[] args)
     {
-        // 当首个参数是 "smoke" 时跑联调脚本,否则启动 Avalonia UI
-        if (args.Length > 0 && args[0] == "smoke")
+        if (args.Length > 0 && args[0] == "smoke-local")
         {
-            Task.Run(async () => await Smoke.SmokeTest.RunAsync())
-                .GetAwaiter().GetResult();
-            return;
+            await LocalGameEngineSmoke.Run();
+            return 0;
         }
-        if (args.Length > 0 && args[0] == "phase2")
+        if (args.Length > 0 && args[0] == "smoke-local-b")
         {
-            Task.Run(async () => await Smoke.Phase2Smoke.RunAsync())
-                .GetAwaiter().GetResult();
-            return;
-        }
-        if (args.Length > 0 && args[0] == "phase3")
-        {
-            Task.Run(async () => await Smoke.Phase3Smoke.RunAsync())
-                .GetAwaiter().GetResult();
-            return;
-        }
-        if (args.Length > 0 && args[0] == "phase4")
-        {
-            Task.Run(async () => await Smoke.Phase4Smoke.RunAsync())
-                .GetAwaiter().GetResult();
-            return;
-        }
-        if (args.Length > 0 && args[0] == "phase4s")
-        {
-            Task.Run(async () => await Smoke.Phase4ShortSmoke.RunAsync())
-                .GetAwaiter().GetResult();
-            return;
-        }
-        if (args.Length > 0 && args[0] == "phase5")
-        {
-            Task.Run(async () => await Smoke.Phase5Smoke.RunAsync())
-                .GetAwaiter().GetResult();
-            return;
-        }
-        if (args.Length > 0 && args[0] == "phase6")
-        {
-            Task.Run(async () => await Smoke.Phase6Smoke.RunAsync())
-                .GetAwaiter().GetResult();
-            return;
-        }
-        if (args.Length > 0 && args[0] == "phase7")
-        {
-            Task.Run(async () => await Smoke.Phase7Smoke.RunAsync())
-                .GetAwaiter().GetResult();
-            return;
+            await LocalGameEngineSmokeB.Run();
+            return 0;
         }
 
+        // GUI
         BuildAvaloniaApp().StartWithClassicDesktopLifetime(args);
+        return 0;
     }
 
     public static AppBuilder BuildAvaloniaApp()

@@ -13,7 +13,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyCompanyAttribute("Richman.Client")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+3b9d905596bbc19e686dbb459edb6641ecd3cf3f")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+f0589b82a5b9567e4c59681b20c85e8fcf6156e8")]
 [assembly: System.Reflection.AssemblyProductAttribute("Richman.Client")]
 [assembly: System.Reflection.AssemblyTitleAttribute("Richman.Client")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]
