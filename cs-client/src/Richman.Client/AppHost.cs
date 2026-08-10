@@ -22,6 +22,9 @@ public static class AppHost
         // 注册 LocalGameEngine 实例 (供 Smoke 直接调用)
         services.AddSingleton(sp => (LocalGameEngine)sp.GetRequiredService<IGameTransport>());
 
+        // 同时注册 GameClient,让依赖 GameClient 具体类的 ViewModel 也能解析
+        services.AddSingleton<Richman.Client.Net.GameClient>();
+
         services.AddSingleton<ViewModels.MainViewModel>();
         services.AddSingleton<ViewModels.LobbyViewModel>();
         services.AddSingleton<ViewModels.BoardViewModel>();

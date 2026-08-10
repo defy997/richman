@@ -25,8 +25,8 @@
                 </ItemsControl.ItemsPanel>
                 <ItemsControl.ItemTemplate>
                     <DataTemplate DataType="vm:BoardCellViewModel">
-                        <Button Command="{Binding $parent[ItemsControl].((vm:BoardViewModel)DataContext).SelectCellCommand}"
-                                CommandParameter="{Binding Id}"
+                        <Button Click="OnCellClick"
+                                Tag="{Binding Id}"
                                 Padding="0" Margin="2"
                                 Background="{Binding BackgroundColor}"
                                 BorderBrush="{Binding OwnerBorderColor}"
@@ -258,8 +258,8 @@
                         <ItemsControl ItemsSource="{Binding SpecialUpgradeOptions}">
                             <ItemsControl.ItemTemplate>
                                 <DataTemplate DataType="vm:SpecialUpgradeOption">
-                                    <Button Command="{Binding $parent[ItemsControl].((vm:BoardViewModel)DataContext).ApplySpecialUpgradeCommand}"
-                                            CommandParameter="{Binding Type}"
+                                    <Button Click="OnSpecialUpgradeClick"
+                                            Tag="{Binding Type}"
                                             Background="#7c3aed" Margin="0,2"
                                             HorizontalAlignment="Stretch"
                                             HorizontalContentAlignment="Left" Padding="8,6">

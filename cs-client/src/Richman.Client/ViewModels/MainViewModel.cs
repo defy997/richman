@@ -14,7 +14,7 @@ namespace Richman.Client.ViewModels;
 
 public sealed partial class MainViewModel : ObservableObject
 {
-    private readonly GameClient _client;
+    private readonly IGameTransport _client;
     private readonly GameStore _store;
     private readonly LobbyViewModel _lobby;
     private readonly GameBoardViewModel _board;
@@ -27,7 +27,7 @@ public sealed partial class MainViewModel : ObservableObject
     public GameStore          Store      => _store;
 
     public MainViewModel(
-        GameClient client,
+        IGameTransport client,
         GameStore store,
         LobbyViewModel lobby,
         GameBoardViewModel board)
@@ -46,7 +46,7 @@ public sealed partial class MainViewModel : ObservableObject
     [RelayCommand]
     public async Task ConnectAsync()
     {
-        _client.SetServerUrl(ServerUrl);
+        _client.ServerUrl = ServerUrl;
         await _client.ConnectAsync();
     }
 

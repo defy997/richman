@@ -1,5 +1,5 @@
 {
-  "version": 3,
+  "version": 4,
   "targets": {
     "net8.0": {
       "Avalonia/11.2.2": {
@@ -1898,19 +1898,19 @@
     ]
   },
   "packageFolders": {
-    "/tmp/cursor-sandbox-cache/ff27d08d437319b04246cd50f1da34e8/nuget": {}
+    "C:\\Users\\defying\\AppData\\Local\\Temp\\cursor-sandbox-cache\\3b927f8116c83e590bd42f4877c0e5ed\\nuget": {}
   },
   "project": {
     "version": "1.0.0",
     "restore": {
-      "projectUniqueName": "/root/richman/cs-client/src/Richman.Client/Richman.Client.csproj",
+      "projectUniqueName": "D:\\code\\richman\\cs-client\\src\\Richman.Client\\Richman.Client.csproj",
       "projectName": "Richman.Client",
-      "projectPath": "/root/richman/cs-client/src/Richman.Client/Richman.Client.csproj",
-      "packagesPath": "/tmp/cursor-sandbox-cache/ff27d08d437319b04246cd50f1da34e8/nuget",
-      "outputPath": "/root/richman/cs-client/src/Richman.Client/obj/",
+      "projectPath": "D:\\code\\richman\\cs-client\\src\\Richman.Client\\Richman.Client.csproj",
+      "packagesPath": "C:\\Users\\defying\\AppData\\Local\\Temp\\cursor-sandbox-cache\\3b927f8116c83e590bd42f4877c0e5ed\\nuget",
+      "outputPath": "D:\\code\\richman\\cs-client\\src\\Richman.Client\\obj\\",
       "projectStyle": "PackageReference",
       "configFilePaths": [
-        "/root/.nuget/NuGet/NuGet.Config"
+        "C:\\Users\\defying\\AppData\\Roaming\\NuGet\\NuGet.Config"
       ],
       "originalTargetFrameworks": [
         "net8.0"
@@ -1920,6 +1920,7 @@
       },
       "frameworks": {
         "net8.0": {
+          "framework": "net8.0",
           "targetAlias": "net8.0",
           "projectReferences": {}
         }
@@ -1928,10 +1929,17 @@
         "warnAsError": [
           "NU1605"
         ]
-      }
+      },
+      "restoreAuditProperties": {
+        "enableAudit": "true",
+        "auditLevel": "low",
+        "auditMode": "direct"
+      },
+      "SdkAnalysisLevel": "10.0.300"
     },
     "frameworks": {
       "net8.0": {
+        "framework": "net8.0",
         "targetAlias": "net8.0",
         "dependencies": {
           "Avalonia": {
@@ -1986,12 +1994,30 @@
         ],
         "assetTargetFallback": true,
         "warn": true,
+        "downloadDependencies": [
+          {
+            "name": "Microsoft.AspNetCore.App.Ref",
+            "version": "[8.0.29, 8.0.29]"
+          },
+          {
+            "name": "Microsoft.NETCore.App.Host.win-x64",
+            "version": "[8.0.29, 8.0.29]"
+          },
+          {
+            "name": "Microsoft.NETCore.App.Ref",
+            "version": "[8.0.29, 8.0.29]"
+          },
+          {
+            "name": "Microsoft.WindowsDesktop.App.Ref",
+            "version": "[8.0.29, 8.0.29]"
+          }
+        ],
         "frameworkReferences": {
           "Microsoft.NETCore.App": {
             "privateAssets": "all"
           }
         },
-        "runtimeIdentifierGraphPath": "/usr/lib64/dotnet/sdk/8.0.126/PortableRuntimeIdentifierGraph.json"
+        "runtimeIdentifierGraphPath": "C:\\Program Files\\dotnet\\sdk\\10.0.302/PortableRuntimeIdentifierGraph.json"
       }
     }
   }

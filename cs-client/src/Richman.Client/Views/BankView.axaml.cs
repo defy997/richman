@@ -30,4 +30,14 @@ public partial class BankView : UserControl
         if (Vm is null) return;
         Vm.DepositAmount = Vm.Cash;
     }
+
+    private void OnRepayLoanClick(object? sender, RoutedEventArgs e)
+    {
+        if (Vm is null) return;
+        if (sender is Button btn && btn.Tag is string id)
+        {
+            Vm.SelectedLoanId = id;
+        }
+        Vm.RepayLoan();
+    }
 }

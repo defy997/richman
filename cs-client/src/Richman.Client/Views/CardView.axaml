@@ -22,19 +22,19 @@
                         <Run Text="💎 " />
                         <Run Text="{Binding MyPlayer.Diamonds}" FontWeight="Bold"/>
                     </TextBlock>
-                    <ItemsControl>
+                    <ItemsControl ItemsSource="{Binding MyPlayer.Cards}">
                         <ItemsControl.ItemsPanel>
                             <ItemsPanelTemplate>
                                 <StackPanel Orientation="Horizontal" Spacing="4"/>
                             </ItemsPanelTemplate>
                         </ItemsControl.ItemsPanel>
-                        <ItemsControl.DataTemplates>
-                            <DataTemplate>
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate DataType="x:String">
                                 <Border Background="#7c3aed" Padding="6,2" CornerRadius="4">
                                     <TextBlock Foreground="White" FontSize="11" Text="{Binding}"/>
                                 </Border>
                             </DataTemplate>
-                        </ItemsControl.DataTemplates>
+                        </ItemsControl.ItemTemplate>
                     </ItemsControl>
                 </StackPanel>
             </Border>

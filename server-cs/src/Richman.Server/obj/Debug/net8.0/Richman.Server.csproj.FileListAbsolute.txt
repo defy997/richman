@@ -1,0 +1,8 @@
+D:\code\richman\server-cs\src\Richman.Server\obj\Debug\net8.0\Richman.Server.csproj.AssemblyReference.cache
+D:\code\richman\server-cs\src\Richman.Server\obj\Debug\net8.0\rpswa.dswa.cache.json
+D:\code\richman\server-cs\src\Richman.Server\obj\Debug\net8.0\Richman.Server.GeneratedMSBuildEditorConfig.editorconfig
+D:\code\richman\server-cs\src\Richman.Server\obj\Debug\net8.0\Richman.Server.AssemblyInfoInputs.cache
+D:\code\richman\server-cs\src\Richman.Server\obj\Debug\net8.0\Richman.Server.AssemblyInfo.cs
+D:\code\richman\server-cs\src\Richman.Server\obj\Debug\net8.0\Richman.Server.csproj.CoreCompileInputs.cache
+D:\code\richman\server-cs\src\Richman.Server\obj\Debug\net8.0\Richman.Server.MvcApplicationPartsAssemblyInfo.cache
+D:\code\richman\server-cs\src\Richman.Server\obj\Debug\net8.0\Richman.Server.sourcelink.json

@@ -154,8 +154,8 @@
                                                 <Button Grid.Row="0" Grid.RowSpan="2" Grid.Column="1"
                                                         Content="还款"
                                                         Background="#16a34a"
-                                                        Command="{Binding $parent[ItemsControl].((vm:BankViewModel)DataContext).RepayLoanCommand}"
-                                                        CommandParameter="{Binding Id}"
+                                                        Click="OnRepayLoanClick"
+                                                        Tag="{Binding Id}"
                                                         VerticalAlignment="Center"
                                                         Padding="8,2"/>
                                             </Grid>
