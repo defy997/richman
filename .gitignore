@@ -1,0 +1,44 @@
+# 不上传其他项目
+client/
+server/
+stock_simulator/
+node_modules/
+
+# 依赖锁
+package-lock.json
+package.json
+
+# IDE / 编辑器
+.vs/
+.idea/
+.vscode/
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+
+# .NET 构建产物
+bin/
+obj/
+*.dll
+*.exe
+*.pdb
+*.userprefs
+
+# Avalonia 临时任务文件夹
+.avalonia-build-tasks/
+
+# 调试日志
+debug-*.log
+*.log
+!SPEC.md
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# 临时文件
+*.tmp
+*.bak
+*~

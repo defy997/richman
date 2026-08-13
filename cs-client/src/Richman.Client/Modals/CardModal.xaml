@@ -1,0 +1,376 @@
+<Window x:Class="Richman.Client.Modals.CardModal"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="🎴 卡片售卖机" Height="700" Width="700"
+        WindowStartupLocation="CenterScreen"
+        Background="#1a1b26">
+    <Grid Margin="15">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+        </Grid.RowDefinitions>
+
+        <!-- Header -->
+        <Border Grid.Row="0" Background="#24283b" CornerRadius="8" Padding="12" Margin="0,0,0,10">
+            <Grid>
+                <StackPanel Orientation="Horizontal">
+                    <TextBlock Text="🎴" FontSize="24" VerticalAlignment="Center"/>
+                    <TextBlock Text="卡片售卖机" Foreground="White" FontSize="18" FontWeight="Bold" Margin="10,0" VerticalAlignment="Center"/>
+                </StackPanel>
+                <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                    <TextBlock Text="💎" FontSize="16" Foreground="#fbbf24" VerticalAlignment="Center"/>
+                    <TextBlock x:Name="DiamondCount" Text="0" Foreground="#fbbf24" FontSize="16" FontWeight="Bold" Margin="5,0,0,0" VerticalAlignment="Center"/>
+                    <TextBlock x:Name="DiamondValue" Text="≈ $0" Foreground="#565f89" FontSize="10" Margin="8,0,0,0" VerticalAlignment="Center"/>
+                </StackPanel>
+            </Grid>
+        </Border>
+
+        <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto">
+            <StackPanel>
+                <!-- My Cards Section -->
+                <Border x:Name="MyCardsSection" Background="#24283b" CornerRadius="8" Padding="12" Margin="0,0,0,10" Visibility="Collapsed">
+                    <StackPanel>
+                        <TextBlock Text="我的卡片" Foreground="#f7768e" FontSize="12" FontWeight="Bold" Margin="0,0,0,10"/>
+                        <ItemsControl x:Name="MyCardsList">
+                            <ItemsControl.ItemsPanel>
+                                <ItemsPanelTemplate>
+                                    <WrapPanel/>
+                                </ItemsPanelTemplate>
+                            </ItemsControl.ItemsPanel>
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <Button Content="{Binding DisplayName}" Tag="{Binding CardName}" Margin="5" Padding="10,6"
+                                            Click="UseCard_Click" Cursor="Hand">
+                                        <Button.Style>
+                                            <Style TargetType="Button">
+                                                <Setter Property="Background" Value="#3d4148"/>
+                                                <Setter Property="Foreground" Value="White"/>
+                                                <Setter Property="BorderThickness" Value="2"/>
+                                                <Setter Property="BorderBrush" Value="#565f89"/>
+                                                <Setter Property="Template">
+                                                    <Setter.Value>
+                                                        <ControlTemplate TargetType="Button">
+                                                            <Border Background="{TemplateBinding Background}"
+                                                                    BorderBrush="{TemplateBinding BorderBrush}"
+                                                                    BorderThickness="{TemplateBinding BorderThickness}"
+                                                                    CornerRadius="6" Padding="{TemplateBinding Padding}">
+                                                                <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                                            </Border>
+                                                        </ControlTemplate>
+                                                    </Setter.Value>
+                                                </Setter>
+                                                <Style.Triggers>
+                                                    <Trigger Property="IsMouseOver" Value="True">
+                                                        <Setter Property="BorderBrush" Value="#7aa2f7"/>
+                                                    </Trigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </Button.Style>
+                                    </Button>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </StackPanel>
+                </Border>
+
+                <!-- Use Card Panel -->
+                <Border x:Name="UseCardPanel" Background="#24283b" CornerRadius="8" Padding="15" Margin="0,0,0,10" Visibility="Collapsed">
+                    <StackPanel>
+                        <Grid Margin="0,0,0,10">
+                            <StackPanel Orientation="Horizontal">
+                                <TextBlock x:Name="UseCardIcon" Text="🎴" FontSize="24"/>
+                                <TextBlock x:Name="UseCardTitle" Text="使用卡片" Foreground="#7aa2f7" FontSize="14" FontWeight="Bold" Margin="10,0" VerticalAlignment="Center"/>
+                            </StackPanel>
+                        </Grid>
+
+                        <!-- Dice Card -->
+                        <StackPanel x:Name="DicePanel" Visibility="Collapsed">
+                            <TextBlock Text="选择骰子点数" Foreground="#565f89" FontSize="10" Margin="0,0,0,8"/>
+                            <UniformGrid Columns="6" Margin="0,0,0,10">
+                                <Button Content="1" Tag="1" Click="SelectDice_Click" Margin="2" Height="40" Background="#3d4148" Foreground="White" BorderThickness="0">
+                                    <Button.Style>
+                                        <Style TargetType="Button">
+                                            <Setter Property="Template">
+                                                <Setter.Value>
+                                                    <ControlTemplate TargetType="Button">
+                                                        <Border Background="{TemplateBinding Background}" CornerRadius="4">
+                                                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                                        </Border>
+                                                    </ControlTemplate>
+                                                </Setter.Value>
+                                            </Setter>
+                                        </Style>
+                                    </Button.Style>
+                                </Button>
+                                <Button Content="2" Tag="2" Click="SelectDice_Click" Margin="2" Height="40" Background="#3d4148" Foreground="White" BorderThickness="0">
+                                    <Button.Style>
+                                        <Style TargetType="Button">
+                                            <Setter Property="Template">
+                                                <Setter.Value>
+                                                    <ControlTemplate TargetType="Button">
+                                                        <Border Background="{TemplateBinding Background}" CornerRadius="4">
+                                                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                                        </Border>
+                                                    </ControlTemplate>
+                                                </Setter.Value>
+                                            </Setter>
+                                        </Style>
+                                    </Button.Style>
+                                </Button>
+                                <Button Content="3" Tag="3" Click="SelectDice_Click" Margin="2" Height="40" Background="#3d4148" Foreground="White" BorderThickness="0">
+                                    <Button.Style>
+                                        <Style TargetType="Button">
+                                            <Setter Property="Template">
+                                                <Setter.Value>
+                                                    <ControlTemplate TargetType="Button">
+                                                        <Border Background="{TemplateBinding Background}" CornerRadius="4">
+                                                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                                        </Border>
+                                                    </ControlTemplate>
+                                                </Setter.Value>
+                                            </Setter>
+                                        </Style>
+                                    </Button.Style>
+                                </Button>
+                                <Button Content="4" Tag="4" Click="SelectDice_Click" Margin="2" Height="40" Background="#3d4148" Foreground="White" BorderThickness="0">
+                                    <Button.Style>
+                                        <Style TargetType="Button">
+                                            <Setter Property="Template">
+                                                <Setter.Value>
+                                                    <ControlTemplate TargetType="Button">
+                                                        <Border Background="{TemplateBinding Background}" CornerRadius="4">
+                                                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                                        </Border>
+                                                    </ControlTemplate>
+                                                </Setter.Value>
+                                            </Setter>
+                                        </Style>
+                                    </Button.Style>
+                                </Button>
+                                <Button Content="5" Tag="5" Click="SelectDice_Click" Margin="2" Height="40" Background="#3d4148" Foreground="White" BorderThickness="0">
+                                    <Button.Style>
+                                        <Style TargetType="Button">
+                                            <Setter Property="Template">
+                                                <Setter.Value>
+                                                    <ControlTemplate TargetType="Button">
+                                                        <Border Background="{TemplateBinding Background}" CornerRadius="4">
+                                                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                                        </Border>
+                                                    </ControlTemplate>
+                                                </Setter.Value>
+                                            </Setter>
+                                        </Style>
+                                    </Button.Style>
+                                </Button>
+                                <Button Content="6" Tag="6" Click="SelectDice_Click" Margin="2" Height="40" Background="#3d4148" Foreground="White" BorderThickness="0">
+                                    <Button.Style>
+                                        <Style TargetType="Button">
+                                            <Setter Property="Template">
+                                                <Setter.Value>
+                                                    <ControlTemplate TargetType="Button">
+                                                        <Border Background="{TemplateBinding Background}" CornerRadius="4">
+                                                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                                        </Border>
+                                                    </ControlTemplate>
+                                                </Setter.Value>
+                                            </Setter>
+                                        </Style>
+                                    </Button.Style>
+                                </Button>
+                            </UniformGrid>
+                        </StackPanel>
+
+                        <!-- Stock Select Panel -->
+                        <StackPanel x:Name="StockSelectPanel" Visibility="Collapsed">
+                            <TextBlock Text="选择股票" Foreground="#565f89" FontSize="10" Margin="0,0,0,8"/>
+                            <ItemsControl x:Name="StockList">
+                                <ItemsControl.ItemsPanel>
+                                    <ItemsPanelTemplate>
+                                        <WrapPanel/>
+                                    </ItemsPanelTemplate>
+                                </ItemsControl.ItemsPanel>
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate>
+                                        <Button Tag="{Binding Symbol}" Click="SelectStock_Click" Margin="3" Padding="8,4" Cursor="Hand">
+                                            <Button.Style>
+                                                <Style TargetType="Button">
+                                                    <Setter Property="Background" Value="#3d4148"/>
+                                                    <Setter Property="Foreground" Value="White"/>
+                                                    <Setter Property="BorderThickness" Value="0"/>
+                                                    <Setter Property="Template">
+                                                        <Setter.Value>
+                                                            <ControlTemplate TargetType="Button">
+                                                                <Border Background="{TemplateBinding Background}" CornerRadius="4" Padding="{TemplateBinding Padding}">
+                                                                    <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                                                </Border>
+                                                            </ControlTemplate>
+                                                        </Setter.Value>
+                                                    </Setter>
+                                                </Style>
+                                            </Button.Style>
+                                            <StackPanel Orientation="Horizontal">
+                                                <TextBlock Text="{Binding Symbol}" FontSize="10"/>
+                                                <TextBlock Text=" " FontSize="10"/>
+                                                <TextBlock Text="{Binding Name}" FontSize="10"/>
+                                            </StackPanel>
+                                        </Button>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </StackPanel>
+
+                        <!-- Rumor Panel -->
+                        <StackPanel x:Name="RumorPanel" Visibility="Collapsed">
+                            <TextBlock Text="第1步：选择股票" Foreground="#565f89" FontSize="10" Margin="0,0,0,8"/>
+                            <ItemsControl x:Name="RumorStockList" Margin="0,0,0,10">
+                                <ItemsControl.ItemsPanel>
+                                    <ItemsPanelTemplate>
+                                        <WrapPanel/>
+                                    </ItemsPanelTemplate>
+                                </ItemsControl.ItemsPanel>
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate>
+                                        <Button Tag="{Binding Symbol}" Click="SelectRumorStock_Click" Margin="3" Padding="8,4" Cursor="Hand">
+                                            <Button.Style>
+                                                <Style TargetType="Button">
+                                                    <Setter Property="Background" Value="#3d4148"/>
+                                                    <Setter Property="Foreground" Value="White"/>
+                                                    <Setter Property="BorderThickness" Value="0"/>
+                                                    <Setter Property="Template">
+                                                        <Setter.Value>
+                                                            <ControlTemplate TargetType="Button">
+                                                                <Border Background="{TemplateBinding Background}" CornerRadius="4" Padding="{TemplateBinding Padding}">
+                                                                    <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                                                </Border>
+                                                            </ControlTemplate>
+                                                        </Setter.Value>
+                                                    </Setter>
+                                                </Style>
+                                            </Button.Style>
+                                            <StackPanel Orientation="Horizontal">
+                                                <TextBlock Text="{Binding Symbol}" FontSize="10"/>
+                                                <TextBlock Text=" " FontSize="10"/>
+                                                <TextBlock Text="{Binding Name}" FontSize="10"/>
+                                            </StackPanel>
+                                        </Button>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+
+                            <StackPanel x:Name="RumorDirectionPanel" Visibility="Collapsed">
+                                <TextBlock Text="第2步：选择消息方向" Foreground="#565f89" FontSize="10" Margin="0,0,0,8"/>
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="*"/>
+                                    </Grid.ColumnDefinitions>
+                                    <Button Grid.Column="0" Content="🟢 散布利好" Tag="good" Click="SelectRumorDirection_Click" Margin="0,0,5,0" Height="40">
+                                        <Button.Style>
+                                            <Style TargetType="Button">
+                                                <Setter Property="Background" Value="#196627"/>
+                                                <Setter Property="Foreground" Value="White"/>
+                                                <Setter Property="BorderThickness" Value="0"/>
+                                                <Setter Property="Template">
+                                                    <Setter.Value>
+                                                        <ControlTemplate TargetType="Button">
+                                                            <Border Background="{TemplateBinding Background}" CornerRadius="6" Padding="10">
+                                                                <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                                            </Border>
+                                                        </ControlTemplate>
+                                                    </Setter.Value>
+                                                </Setter>
+                                            </Style>
+                                        </Button.Style>
+                                    </Button>
+                                    <Button Grid.Column="1" Content="🔴 散布利空" Tag="bad" Click="SelectRumorDirection_Click" Margin="5,0,0,0" Height="40">
+                                        <Button.Style>
+                                            <Style TargetType="Button">
+                                                <Setter Property="Background" Value="#b91c1c"/>
+                                                <Setter Property="Foreground" Value="White"/>
+                                                <Setter Property="BorderThickness" Value="0"/>
+                                                <Setter Property="Template">
+                                                    <Setter.Value>
+                                                        <ControlTemplate TargetType="Button">
+                                                            <Border Background="{TemplateBinding Background}" CornerRadius="6" Padding="10">
+                                                                <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                                            </Border>
+                                                        </ControlTemplate>
+                                                    </Setter.Value>
+                                                </Setter>
+                                            </Style>
+                                        </Button.Style>
+                                    </Button>
+                                </Grid>
+                            </StackPanel>
+                        </StackPanel>
+
+                        <!-- Execute Button -->
+                        <Button x:Name="ExecuteUseBtn" Content="✓ 使用卡片" Click="ExecuteUse_Click" Margin="0,10,0,0" Height="40"
+                                Background="#7aa2f7" Foreground="White" BorderThickness="0" FontWeight="Bold" FontSize="13">
+                            <Button.Style>
+                                <Style TargetType="Button">
+                                    <Setter Property="Template">
+                                        <Setter.Value>
+                                            <ControlTemplate TargetType="Button">
+                                                <Border Background="{TemplateBinding Background}" CornerRadius="6" Padding="15,10">
+                                                    <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                                </Border>
+                                            </ControlTemplate>
+                                        </Setter.Value>
+                                    </Setter>
+                                </Style>
+                            </Button.Style>
+                        </Button>
+                    </StackPanel>
+                </Border>
+
+                <!-- Shop Section -->
+                <Border Background="#24283b" CornerRadius="8" Padding="12">
+                    <StackPanel>
+                        <TextBlock Text="商店 (点击购买)" Foreground="#fbbf24" FontSize="12" FontWeight="Bold" Margin="0,0,0,10"/>
+                        <TextBlock x:Name="NotMyTurnHint" Text="⏳ 等待你的回合才能购买" Foreground="#565f89" FontSize="10" Margin="0,0,0,10" Visibility="Collapsed"/>
+                        <ItemsControl x:Name="CardShop">
+                            <ItemsControl.ItemsPanel>
+                                <ItemsPanelTemplate>
+                                    <WrapPanel/>
+                                </ItemsPanelTemplate>
+                            </ItemsControl.ItemsPanel>
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <Border Width="150" CornerRadius="8" Padding="10" Margin="5" Cursor="Hand" MouseLeftButtonDown="BuyCard_Click">
+                                        <Border.Background>
+                                            <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
+                                                <GradientStop Color="{Binding GradientStart}" Offset="0"/>
+                                                <GradientStop Color="{Binding GradientEnd}" Offset="1"/>
+                                            </LinearGradientBrush>
+                                        </Border.Background>
+                                        <Border.Style>
+                                            <Style TargetType="Border">
+                                                <Style.Triggers>
+                                                    <DataTrigger Binding="{Binding CanBuy}" Value="False">
+                                                        <Setter Property="Opacity" Value="0.5"/>
+                                                    </DataTrigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </Border.Style>
+                                        <StackPanel>
+                                            <Grid>
+                                                <TextBlock Text="{Binding Icon}" FontSize="24"/>
+                                                <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                                                    <TextBlock Text="💎" Foreground="#fbbf24" FontSize="10"/>
+                                                    <TextBlock Text="{Binding Price}" Foreground="#fbbf24" FontSize="10" FontWeight="Bold"/>
+                                                </StackPanel>
+                                            </Grid>
+                                            <TextBlock Text="{Binding Name}" Foreground="White" FontWeight="Bold" FontSize="11" Margin="0,5,0,0"/>
+                                            <TextBlock Text="{Binding Desc}" Foreground="#ffffffaa" FontSize="8" TextWrapping="Wrap" Margin="0,2,0,0"/>
+                                        </StackPanel>
+                                    </Border>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </StackPanel>
+                </Border>
+            </StackPanel>
+        </ScrollViewer>
+    </Grid>
+</Window>

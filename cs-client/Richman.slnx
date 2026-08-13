@@ -1,0 +1,7 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/Richman.Client/Richman.Client.csproj" />
+    <Project Path="src/Richman.Server/Richman.Server.csproj" />
+    <Project Path="src/Richman.Shared/Richman.Shared.csproj" />
+  </Folder>
+</Solution>

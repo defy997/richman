@@ -1,0 +1,435 @@
+﻿<Window x:Class="Richman.Client.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:local="clr-namespace:Richman.Client"
+        xmlns:vm="clr-namespace:Richman.Client.ViewModels"
+        mc:Ignorable="d"
+        Title="大富翁 RichMan" Height="900" Width="1600"
+        Background="#0f172a">
+    <Window.DataContext>
+        <vm:MainViewModel/>
+    </Window.DataContext>
+
+    <Grid Margin="8">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <!-- Header -->
+        <Border Grid.Row="0" Background="#1e293b" CornerRadius="8" Padding="12" Margin="0,0,0,8">
+            <StackPanel>
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+
+                    <!-- Left: Logo + Mode -->
+                    <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center">
+                        <TextBlock Text="RichMan" Foreground="#f43f5e" FontSize="18" FontWeight="Bold" VerticalAlignment="Center"/>
+                        <Border Background="#fbbf24" CornerRadius="4" Padding="6,2" Margin="10,0,0,0" x:Name="SingleplayerBadge" Visibility="Collapsed">
+                            <TextBlock Text="单人" Foreground="#0f172a" FontSize="10" FontWeight="Bold"/>
+                        </Border>
+                        <TextBlock x:Name="RoomInfoText" Text="" Foreground="#64748b" FontSize="12" Margin="15,0,0,0" VerticalAlignment="Center"/>
+                    </StackPanel>
+
+                    <!-- Right: Turn + Player -->
+                    <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
+                        <TextBlock Text="回合:" Foreground="#64748b" FontSize="12" VerticalAlignment="Center" Margin="0,0,8,0"/>
+                        <TextBlock x:Name="TurnText" Text="0" Foreground="#e2e8f0" FontSize="14" FontWeight="Bold" VerticalAlignment="Center" Margin="0,0,20,0"/>
+
+                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                            <Ellipse x:Name="CurrentPlayerColor" Width="14" Height="14" VerticalAlignment="Center"/>
+                            <TextBlock x:Name="CurrentPlayerName" Text="" Foreground="#e2e8f0" FontSize="12" VerticalAlignment="Center" Margin="8,0"/>
+                            <TextBlock x:Name="TonghuashunIcon" Text="📱" FontSize="10" VerticalAlignment="Center" Visibility="Collapsed"/>
+                            <Border x:Name="MyTurnBadge" Background="#f43f5e" CornerRadius="4" Padding="8,2" Visibility="Collapsed">
+                                <TextBlock Text="你的回合" Foreground="White" FontSize="10" FontWeight="Bold"/>
+                            </Border>
+                        </StackPanel>
+                    </StackPanel>
+                </Grid>
+
+                <!-- Progress Bar (Singleplayer) -->
+                <Grid x:Name="ProgressPanel" Visibility="Collapsed" Margin="0,8,0,0">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Grid.Column="0" Text="目标进度 (亿万富翁)" Foreground="#64748b" FontSize="11"/>
+                    <TextBlock Grid.Column="1" x:Name="ProgressText" Text="0%" Foreground="#fbbf24" FontSize="11" FontWeight="Bold"/>
+                </Grid>
+                <Border x:Name="ProgressPanel2" Visibility="Collapsed" Background="#334155" CornerRadius="2" Height="8" Margin="0,4,0,0">
+                    <Border x:Name="ProgressBar" Background="#fbbf24" CornerRadius="2" HorizontalAlignment="Left" Width="0"/>
+                </Border>
+            </StackPanel>
+        </Border>
+
+        <!-- Main Content -->
+        <Grid Grid.Row="1">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="288"/>
+                <ColumnDefinition Width="288"/>
+            </Grid.ColumnDefinitions>
+
+            <!-- Left: Board -->
+            <Border Grid.Column="0" Background="#1e293b" CornerRadius="8" Padding="8" Margin="0,0,8,0">
+                <Grid>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="*"/>
+                    </Grid.RowDefinitions>
+
+                    <StackPanel Grid.Row="0" Orientation="Horizontal" Margin="0,0,0,8">
+                        <TextBlock Text="🗺️" FontSize="16" VerticalAlignment="Center"/>
+                        <TextBlock Text="游戏地图" Foreground="#e2e8f0" FontSize="14" FontWeight="Bold" Margin="8,0" VerticalAlignment="Center"/>
+                    </StackPanel>
+
+                    <Canvas x:Name="GameBoard" Grid.Row="1" Background="#0f3460" ClipToBounds="True" SizeChanged="GameBoard_SizeChanged"/>
+                </Grid>
+            </Border>
+
+            <!-- Middle: Calendar + Log -->
+            <Grid Grid.Column="1" Margin="0,0,8,0">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="*"/>
+                </Grid.RowDefinitions>
+
+                <!-- Calendar -->
+                <Border Grid.Row="0" Background="#1e293b" CornerRadius="8" Padding="12" Margin="0,0,0,8">
+                    <StackPanel>
+                        <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
+                            <TextBlock Text="📅" FontSize="14" VerticalAlignment="Center"/>
+                            <TextBlock x:Name="CalendarDateText" Text="2026年1月1日" Foreground="#fbbf24" FontSize="13" FontWeight="Bold" Margin="8,0" VerticalAlignment="Center"/>
+                        </StackPanel>
+                        <UniformGrid x:Name="CalendarGrid" Rows="7" Columns="7"/>
+                    </StackPanel>
+                </Border>
+
+                <!-- Message Log -->
+                <Border Grid.Row="1" Background="#1e293b" CornerRadius="8" Padding="12">
+                    <Grid>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="*"/>
+                        </Grid.RowDefinitions>
+
+                        <StackPanel Grid.Row="0" Orientation="Horizontal" Margin="0,0,0,8">
+                            <TextBlock Text="📜" FontSize="14" VerticalAlignment="Center"/>
+                            <TextBlock Text="游戏日志" Foreground="#e2e8f0" FontSize="14" FontWeight="Bold" Margin="8,0" VerticalAlignment="Center"/>
+                            <TextBlock Text="滚轮查看" Foreground="#475569" FontSize="10" VerticalAlignment="Center"/>
+                        </StackPanel>
+
+                        <ListBox Grid.Row="1" x:Name="MessageLog" Background="Transparent" BorderThickness="0"
+                                 ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+                            <ListBox.ItemTemplate>
+                                <DataTemplate>
+                                    <TextBlock Text="{Binding Content}" Foreground="White" TextWrapping="Wrap" FontSize="11" Margin="0,1"/>
+                                </DataTemplate>
+                            </ListBox.ItemTemplate>
+                        </ListBox>
+                    </Grid>
+                </Border>
+            </Grid>
+
+            <!-- Right: Control + Player Info -->
+            <Grid Grid.Column="2">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="*"/>
+                </Grid.RowDefinitions>
+
+                <!-- Control Panel -->
+                <Border Grid.Row="0" Background="#1e293b" CornerRadius="8" Padding="12" Margin="0,0,0,8">
+                    <StackPanel>
+                        <TextBlock Text="🎮 行动控制" Foreground="#e2e8f0" FontSize="14" FontWeight="Bold" HorizontalAlignment="Center" Margin="0,0,0,12"/>
+
+                        <!-- Dice Display -->
+                        <Border x:Name="DiceDisplay" Background="#0f3460" CornerRadius="8" Padding="15" HorizontalAlignment="Center" Margin="0,0,0,12" Visibility="Collapsed">
+                            <StackPanel HorizontalAlignment="Center">
+                                <TextBlock Text="🎲" FontSize="20" HorizontalAlignment="Center"/>
+                                <TextBlock x:Name="DiceValueText" Text="0" Foreground="#f43f5e" FontSize="32" FontWeight="Bold" HorizontalAlignment="Center"/>
+                            </StackPanel>
+                        </Border>
+
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+                            <Button Grid.Column="0" x:Name="RollDiceBtn" Content="🎲 掷骰子" Click="RollDice_Click" Margin="0,0,4,0"
+                                    Background="#f43f5e" Foreground="White" BorderThickness="0" Padding="12,10" FontWeight="Bold"/>
+                            <Button Grid.Column="1" x:Name="EndTurnBtn" Content="⏭️ 结束回合" Click="EndTurn_Click" IsEnabled="False" Margin="4,0,0,0"
+                                    Background="#64748b" Foreground="White" BorderThickness="0" Padding="12,10" FontWeight="Bold"/>
+                        </Grid>
+
+                        <!-- Player Name Input -->
+                        <Grid Margin="0,12,0,0">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <TextBox x:Name="PlayerNameBox" Text="玩家" Background="#334155" Foreground="White" 
+                                     BorderBrush="#475569" Padding="8,6" FontSize="12"/>
+                            <Button Grid.Column="1" x:Name="StartBtn" Content="开始" Click="StartSingleplayer_Click" Margin="8,0,0,0"
+                                    Background="#f43f5e" Foreground="White" BorderThickness="0" Padding="12,6" FontWeight="Bold"/>
+                        </Grid>
+                    </StackPanel>
+                </Border>
+
+                <!-- Player Info -->
+                <Border Grid.Row="1" x:Name="PlayerInfoPanel" Background="#1e293b" CornerRadius="8" Padding="12" Visibility="Collapsed">
+                    <ScrollViewer VerticalScrollBarVisibility="Auto">
+                        <StackPanel>
+                            <StackPanel Orientation="Horizontal" Margin="0,0,0,12">
+                                <TextBlock Text="📊" FontSize="14" VerticalAlignment="Center"/>
+                                <TextBlock Text="玩家信息" Foreground="#e2e8f0" FontSize="14" FontWeight="Bold" Margin="8,0" VerticalAlignment="Center"/>
+                            </StackPanel>
+
+                            <!-- My Assets Card -->
+                            <Border Background="#0f3460" CornerRadius="8" Padding="12" Margin="0,0,0,8">
+                                <Grid>
+                                    <Grid.RowDefinitions>
+                                        <RowDefinition Height="Auto"/>
+                                        <RowDefinition Height="Auto"/>
+                                    </Grid.RowDefinitions>
+
+                                    <StackPanel Grid.Row="0" Orientation="Horizontal" Margin="0,0,0,10">
+                                        <Ellipse x:Name="MyColor" Width="20" Height="20"/>
+                                        <TextBlock x:Name="MyName" Text="玩家" Foreground="White" FontWeight="Bold" FontSize="14" Margin="10,0" VerticalAlignment="Center"/>
+                                        <Border Background="#22c55e" CornerRadius="4" Padding="6,2">
+                                            <TextBlock Text="你" Foreground="White" FontSize="10"/>
+                                        </Border>
+                                    </StackPanel>
+
+                                    <Grid Grid.Row="1">
+                                        <Grid.RowDefinitions>
+                                            <RowDefinition Height="Auto"/>
+                                            <RowDefinition Height="Auto"/>
+                                            <RowDefinition Height="Auto"/>
+                                            <RowDefinition Height="Auto"/>
+                                            <RowDefinition Height="Auto"/>
+                                            <RowDefinition Height="Auto"/>
+                                        </Grid.RowDefinitions>
+
+                                        <TextBlock Grid.Row="0" Text="💵 现金" Foreground="#94a3b8" FontSize="11"/>
+                                        <TextBlock Grid.Row="0" x:Name="MyCash" Text="$50,000" Foreground="#22c55e" FontSize="11" FontWeight="Bold" HorizontalAlignment="Right"/>
+
+                                        <TextBlock Grid.Row="1" Text="🏦 存款" Foreground="#94a3b8" FontSize="11" Margin="0,4,0,0"/>
+                                        <TextBlock Grid.Row="1" x:Name="MyDeposit" Text="$50,000" Foreground="#3b82f6" FontSize="11" FontWeight="Bold" HorizontalAlignment="Right" Margin="0,4,0,0"/>
+
+                                        <TextBlock Grid.Row="2" Text="💎 钻石" Foreground="#94a3b8" FontSize="11" Margin="0,4,0,0"/>
+                                        <TextBlock Grid.Row="2" x:Name="MyDiamonds" Text="100" Foreground="#fbbf24" FontSize="11" FontWeight="Bold" HorizontalAlignment="Right" Margin="0,4,0,0"/>
+
+                                        <TextBlock Grid.Row="3" Text="📈 股票" Foreground="#94a3b8" FontSize="11" Margin="0,4,0,0"/>
+                                        <TextBlock Grid.Row="3" x:Name="MyStocks" Text="$0" Foreground="#06b6d4" FontSize="11" FontWeight="Bold" HorizontalAlignment="Right" Margin="0,4,0,0"/>
+
+                                        <TextBlock Grid.Row="4" Text="🏘️ 地产" Foreground="#94a3b8" FontSize="11" Margin="0,4,0,0"/>
+                                        <TextBlock Grid.Row="4" x:Name="MyProperties" Text="0块" Foreground="#a3e635" FontSize="11" FontWeight="Bold" HorizontalAlignment="Right" Margin="0,4,0,0"/>
+
+                                        <Border Grid.Row="5" BorderThickness="0,1,0,0" BorderBrush="#334155" Margin="0,8,0,0" Padding="0,8,0,0">
+                                            <Grid>
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="*"/>
+                                                    <ColumnDefinition Width="Auto"/>
+                                                </Grid.ColumnDefinitions>
+                                                <TextBlock Grid.Column="0" Text="📊 总资产" Foreground="White" FontSize="12" FontWeight="Bold"/>
+                                                <TextBlock Grid.Column="1" x:Name="MyTotalAssets" Text="$100,000" Foreground="#fbbf24" FontSize="14" FontWeight="Bold"/>
+                                            </Grid>
+                                        </Border>
+                                    </Grid>
+                                </Grid>
+                            </Border>
+
+                            <!-- Property Actions -->
+                            <Grid Margin="0,0,0,8">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="*"/>
+                                </Grid.ColumnDefinitions>
+                                <Button Grid.Column="0" x:Name="BuyBtn" Content="🏠 购买" Click="BuyProperty_Click" IsEnabled="False" Margin="0,0,4,0"
+                                        Background="#22c55e" Foreground="White" BorderThickness="0" Padding="10,8" FontWeight="Bold"/>
+                                <Button Grid.Column="1" x:Name="UpgradeBtn" Content="⬆️ 升级" Click="UpgradeProperty_Click" IsEnabled="False" Margin="4,0,0,0"
+                                        Background="#f59e0b" Foreground="White" BorderThickness="0" Padding="10,8" FontWeight="Bold"/>
+                            </Grid>
+
+                            <TextBlock x:Name="SelectedCellInfo" Text="点击地图选择地皮" Foreground="#64748b" FontSize="10" HorizontalAlignment="Center" Margin="0,4,0,8"/>
+
+                            <!-- 提示：地块操作按钮已搬到地图上（地块旁浮动显示） -->
+                            <TextBlock Text="💡 选中地皮后，操作按钮会显示在地图上该地皮旁边"
+                                       Foreground="#94a3b8" FontSize="10" HorizontalAlignment="Center"
+                                       Margin="0,0,0,8" TextWrapping="Wrap"/>
+
+                            <!-- 选中格子的浮动操作面板（保留作为地图按钮不可用时的后备显示） -->
+                            <Border x:Name="CellActionsPanel" Background="#0a0e27" CornerRadius="6" Padding="8" Margin="0,0,0,8"
+                                    Visibility="Collapsed" BorderBrush="#fbbf24" BorderThickness="1">
+                                <StackPanel>
+                                    <TextBlock x:Name="CellActionsTitle" Text="地块操作" Foreground="#fbbf24" FontSize="11" FontWeight="Bold" Margin="0,0,0,6"/>
+                                    <Button x:Name="CellBuyBtn" Content="🏠 购买地皮" Click="CellBuyBtn_Click"
+                                            Background="#22c55e" Foreground="White" BorderThickness="0" Padding="10,6" FontWeight="Bold" Margin="0,0,0,4"/>
+                                    <Button x:Name="CellUpgradeBtn" Content="⬆️ 升级地皮" Click="CellUpgradeBtn_Click"
+                                            Background="#f59e0b" Foreground="White" BorderThickness="0" Padding="10,6" FontWeight="Bold" Margin="0,0,0,4"/>
+                                    <Button x:Name="CellForceUpgradeBtn" Content="🃏 用升级卡升级" Click="CellForceUpgradeBtn_Click"
+                                            Background="#8b5cf6" Foreground="White" BorderThickness="0" Padding="10,6" FontWeight="Bold" Margin="0,0,0,4"/>
+                                    <TextBlock x:Name="CellActionHint" Text="" Foreground="#94a3b8" FontSize="10" TextWrapping="Wrap" Margin="0,4,0,0"/>
+                                </StackPanel>
+                            </Border>
+
+                            <!-- Other Players -->
+                            <TextBlock Text="其他玩家" Foreground="#94a3b8" FontSize="11" FontWeight="Bold" Margin="0,0,0,5"/>
+                            <ItemsControl x:Name="OtherPlayersList">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate>
+                                        <Border Background="#0f3460" CornerRadius="4" Padding="8" Margin="0,2" Opacity="0.8">
+                                            <Grid>
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="Auto"/>
+                                                    <ColumnDefinition Width="*"/>
+                                                    <ColumnDefinition Width="Auto"/>
+                                                </Grid.ColumnDefinitions>
+                                                <Ellipse Grid.Column="0" Width="12" Height="12"/>
+                                                <StackPanel Grid.Column="1" Margin="8,0">
+                                                    <TextBlock Text="{Binding Name}" Foreground="White" FontSize="11"/>
+                                                    <TextBlock FontSize="9" Foreground="#64748b">
+                                                        <Run Text="现金$"/><Run Text="{Binding Cash, StringFormat=N0}"/>
+                                                    </TextBlock>
+                                                </StackPanel>
+                                                <TextBlock Grid.Column="2" Text="{Binding TotalAssets, StringFormat=${0:N0}}" 
+                                                           Foreground="#fbbf24" FontSize="10" FontWeight="Bold" VerticalAlignment="Center"/>
+                                            </Grid>
+                                        </Border>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </StackPanel>
+                    </ScrollViewer>
+                </Border>
+            </Grid>
+        </Grid>
+
+        <!-- Bottom Panel Buttons -->
+        <Grid Grid.Row="2" Margin="0,8,0,0">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="*"/>
+            </Grid.ColumnDefinitions>
+
+            <!-- Stock Button -->
+            <Border Grid.Column="0" x:Name="StockPanelBtn" Background="#1e293b" CornerRadius="8" Padding="10" Margin="0,0,4,0" Cursor="Hand" MouseLeftButtonDown="OpenStockPanel_Click">
+                <StackPanel>
+                    <StackPanel Orientation="Horizontal" Margin="0,0,0,4">
+                        <TextBlock Text="📈" FontSize="16" VerticalAlignment="Center"/>
+                        <TextBlock Text="股票市场" Foreground="#e2e8f0" FontSize="12" FontWeight="Bold" Margin="6,0" VerticalAlignment="Center"/>
+                        <TextBlock Text="→" Foreground="#64748b" FontSize="12" VerticalAlignment="Center"/>
+                    </StackPanel>
+                    <TextBlock x:Name="StockHint" Text="点击展开" Foreground="#64748b" FontSize="9"/>
+                </StackPanel>
+            </Border>
+
+            <!-- Futures Button -->
+            <Border Grid.Column="1" x:Name="FuturesPanelBtn" Background="#1e293b" CornerRadius="8" Padding="10" Margin="4,0" Cursor="Hand" MouseLeftButtonDown="OpenFuturesPanel_Click">
+                <StackPanel>
+                    <StackPanel Orientation="Horizontal" Margin="0,0,0,4">
+                        <TextBlock Text="🛢️" FontSize="16" VerticalAlignment="Center"/>
+                        <TextBlock Text="期货交易所" Foreground="#e2e8f0" FontSize="12" FontWeight="Bold" Margin="6,0" VerticalAlignment="Center"/>
+                        <TextBlock Text="→" Foreground="#64748b" FontSize="12" VerticalAlignment="Center"/>
+                    </StackPanel>
+    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Grid.Column="0" x:Name="DiamondCount" Text="💎 0" Foreground="#fbbf24" FontSize="9"/>
+                        <TextBlock Grid.Column="1" x:Name="DepositInfo" Text="$0" Foreground="#22c55e" FontSize="9"/>
+                    </Grid>
+                </StackPanel>
+            </Border>
+
+            <!-- Bank Button -->
+            <Border Grid.Column="2" x:Name="BankPanelBtn" Background="#1e293b" CornerRadius="8" Padding="10" Margin="4,0" Cursor="Hand" MouseLeftButtonDown="OpenBankPanel_Click">
+                <StackPanel>
+                    <StackPanel Orientation="Horizontal" Margin="0,0,0,4">
+                        <TextBlock Text="🏦" FontSize="16" VerticalAlignment="Center"/>
+                        <TextBlock Text="银行" Foreground="#e2e8f0" FontSize="12" FontWeight="Bold" Margin="6,0" VerticalAlignment="Center"/>
+                        <TextBlock Text="→" Foreground="#64748b" FontSize="12" VerticalAlignment="Center"/>
+                    </StackPanel>
+                    <TextBlock Text="存取款/贷款" Foreground="#64748b" FontSize="9"/>
+                </StackPanel>
+            </Border>
+
+            <!-- RealEstate Button -->
+            <Border Grid.Column="3" x:Name="RealEstatePanelBtn" Background="#1e293b" CornerRadius="8" Padding="10" Margin="4,0" Cursor="Hand" MouseLeftButtonDown="OpenRealEstatePanel_Click">
+                <StackPanel>
+                    <StackPanel Orientation="Horizontal" Margin="0,0,0,4">
+                        <TextBlock Text="🏛️" FontSize="16" VerticalAlignment="Center"/>
+                        <TextBlock Text="房地产" Foreground="#e2e8f0" FontSize="12" FontWeight="Bold" Margin="6,0" VerticalAlignment="Center"/>
+                        <TextBlock Text="→" Foreground="#64748b" FontSize="12" VerticalAlignment="Center"/>
+                    </StackPanel>
+                    <TextBlock Text="购买/升级/拍卖" Foreground="#64748b" FontSize="9"/>
+                </StackPanel>
+            </Border>
+
+            <!-- Card Button -->
+            <Border Grid.Column="4" x:Name="CardPanelBtn" Background="#1e293b" CornerRadius="8" Padding="10" Margin="4,0,0,0" Cursor="Hand" MouseLeftButtonDown="OpenCardPanel_Click">
+                <StackPanel>
+                    <StackPanel Orientation="Horizontal" Margin="0,0,0,4">
+                        <TextBlock Text="🎴" FontSize="16" VerticalAlignment="Center"/>
+                        <TextBlock Text="卡片" Foreground="#e2e8f0" FontSize="12" FontWeight="Bold" Margin="6,0" VerticalAlignment="Center"/>
+                        <TextBlock Text="→" Foreground="#64748b" FontSize="12" VerticalAlignment="Center"/>
+                    </StackPanel>
+                    <TextBlock Text="功能卡/道具" Foreground="#64748b" FontSize="9"/>
+                </StackPanel>
+            </Border>
+
+            <!-- Market Button -->
+            <Border Grid.Column="5" x:Name="MarketPanelBtn" Background="#1e293b" CornerRadius="8" Padding="10" Margin="4,0,0,0" Cursor="Hand" MouseLeftButtonDown="OpenMarketPanel_Click">
+                <StackPanel>
+                    <StackPanel Orientation="Horizontal" Margin="0,0,0,4">
+                        <TextBlock Text="🛒" FontSize="16" VerticalAlignment="Center"/>
+                        <TextBlock Text="商品市场" Foreground="#e2e8f0" FontSize="12" FontWeight="Bold" Margin="6,0" VerticalAlignment="Center"/>
+                        <TextBlock Text="→" Foreground="#64748b" FontSize="12" VerticalAlignment="Center"/>
+                    </StackPanel>
+                    <TextBlock Text="建材/钻石" Foreground="#64748b" FontSize="9"/>
+                </StackPanel>
+            </Border>
+        </Grid>
+
+        <!-- Win Overlay -->
+        <Grid x:Name="WinOverlay" Grid.RowSpan="3" Visibility="Collapsed" Background="#000000" Opacity="0.8">
+            <Border Background="#1e293b" CornerRadius="16" Padding="40" HorizontalAlignment="Center" VerticalAlignment="Center"
+                    BorderBrush="#fbbf24" BorderThickness="3">
+                <StackPanel HorizontalAlignment="Center">
+                    <TextBlock x:Name="WinIcon" Text="🎉" FontSize="64" HorizontalAlignment="Center" Margin="0,0,0,20"/>
+                    <TextBlock x:Name="WinTitle" Text="亿万富翁达成！" Foreground="#fbbf24" FontSize="28" FontWeight="Bold" HorizontalAlignment="Center" Margin="0,0,0,10"/>
+                    <TextBlock x:Name="WinAssets" Text="总资产: $0" Foreground="White" FontSize="18" HorizontalAlignment="Center" Margin="0,0,0,10"/>
+                    <TextBlock x:Name="WinTurns" Text="共用 0 回合" Foreground="#94a3b8" FontSize="14" HorizontalAlignment="Center" Margin="0,0,0,20"/>
+                    <Button Content="再来一局" Click="RestartGame_Click"
+                            Background="#f43f5e" Foreground="White" BorderThickness="0" Padding="30,12" FontWeight="Bold" FontSize="14"/>
+                </StackPanel>
+            </Border>
+        </Grid>
+
+        <!-- Lose Overlay -->
+        <Grid x:Name="LoseOverlay" Grid.RowSpan="3" Visibility="Collapsed" Background="#000000" Opacity="0.8">
+            <Border Background="#1e293b" CornerRadius="16" Padding="40" HorizontalAlignment="Center" VerticalAlignment="Center">
+                <StackPanel HorizontalAlignment="Center">
+                    <TextBlock Text="😢" FontSize="64" HorizontalAlignment="Center" Margin="0,0,0,20"/>
+                    <TextBlock Text="游戏结束" Foreground="#f43f5e" FontSize="28" FontWeight="Bold" HorizontalAlignment="Center" Margin="0,0,0,10"/>
+                    <TextBlock Text="未能达成亿万富翁目标" Foreground="#94a3b8" FontSize="16" HorizontalAlignment="Center" Margin="0,0,0,20"/>
+                    <Button Content="返回主菜单" Click="RestartGame_Click"
+                            Background="#64748b" Foreground="White" BorderThickness="0" Padding="30,12" FontWeight="Bold" FontSize="14"/>
+                </StackPanel>
+            </Border>
+        </Grid>
+    </Grid>
+</Window>

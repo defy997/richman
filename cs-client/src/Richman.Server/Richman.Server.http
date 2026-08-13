@@ -1,0 +1,6 @@
+@Richman.Server_HostAddress = http://localhost:5124
+
+GET {{Richman.Server_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###
