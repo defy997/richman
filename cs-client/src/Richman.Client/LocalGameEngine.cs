@@ -12,7 +12,7 @@ public class LocalGameEngine
     private readonly Random _random = new();
 
     // AI state machine
-    private enum AIActivity { None, Rolling, Moving, EndingTurn }
+    private enum AIActivity { None, Rolling, Moving, Deciding, EndingTurn }
     private AIActivity _aiActivity = AIActivity.None;
     private Player? _aiPlayer;
 
@@ -33,13 +33,14 @@ public class LocalGameEngine
                 break;
 
             case AIActivity.Moving:
-                _aiActivity = AIActivity.EndingTurn;
                 MovePlayer(current, Room.DiceValue ?? 3);
+                _aiActivity = AIActivity.Deciding;
+                ProcessAIDecisions(current);
                 BroadcastState();
                 break;
 
-            case AIActivity.EndingTurn:
-                _aiActivity = AIActivity.None;
+            case AIActivity.Deciding:
+                _aiActivity = AIActivity.EndingTurn;
                 EndTurn();
                 break;
         }
@@ -174,6 +175,138 @@ public class LocalGameEngine
 
         HandleCellEffect(player, cell);
         // 注意：BroadcastState 由调用方在 Task  continuation 中统一处理（避免 AI 场景 UI 线程死锁）
+    }
+
+    /// <summary>
+    /// AI 决策阶段：处理股票买卖、期货交易等
+    /// </summary>
+    private void ProcessAIDecisions(Player ai)
+    {
+        if (Room == null || ai.IsBankrupt) return;
+
+        // 股票决策
+        if (ai.AtStockExchange && Room.Stocks.Count > 0)
+        {
+            // 优先检查持仓：亏损多的考虑平仓，盈利多的考虑止盈
+            foreach (var holding in ai.Stocks.Where(h => h.Quantity > 0))
+            {
+                var stock = Room.Stocks.FirstOrDefault(s => s.Symbol == holding.Symbol);
+                if (stock == null) continue;
+                var pnl = stock.Price - holding.AvgCost;
+                var pnlPct = holding.AvgCost > 0 ? pnl / holding.AvgCost * 100 : 0;
+
+                // 盈利超过 10% 或亏损超过 15% → 平仓
+                if (pnlPct > 10m || pnlPct < -15m)
+                {
+                    var action = pnl > 0 ? "止盈" : "止损";
+                    ai.Cash += stock.Price * holding.Quantity;
+                    AddMessage(MessageType.Info, $"【AI】{ai.Name} {action}平仓 {stock.Name} x{holding.Quantity}（{(pnl >= 0 ? "+" : "")}${pnl * holding.Quantity:N0}）");
+                    holding.Quantity = 0;
+                }
+            }
+
+            foreach (var shortHolding in ai.Stocks.Where(h => h.ShortQuantity > 0))
+            {
+                var stock = Room.Stocks.FirstOrDefault(s => s.Symbol == shortHolding.Symbol);
+                if (stock == null) continue;
+                var pnl = shortHolding.AvgCost - stock.Price;
+                var pnlPct = shortHolding.AvgCost > 0 ? pnl / shortHolding.AvgCost * 100 : 0;
+
+                if (pnlPct > 10m || pnlPct < -15m)
+                {
+                    var cost = stock.Price * shortHolding.ShortQuantity;
+                    if (ai.Cash >= cost)
+                    {
+                        ai.Cash -= cost;
+                        var action = pnl > 0 ? "止盈" : "止损";
+                        AddMessage(MessageType.Info, $"【AI】{ai.Name} {action}平空 {stock.Name} x{shortHolding.ShortQuantity}（{(pnl >= 0 ? "+" : "")}${pnl * shortHolding.ShortQuantity:N0}）");
+                        shortHolding.ShortQuantity = 0;
+                    }
+                }
+            }
+
+            // 有闲钱（> 5000）时，考虑开新仓
+            var investableCash = ai.Cash - 5000m;
+            if (investableCash > 2000m && _random.NextDouble() < 0.4)
+            {
+                // 找一只 AI 倾向看多的股票（change > 0 或有正面 card bias）
+                var bullish = Room.Stocks
+                    .Where(s => !ai.Stocks.Any(h => h.Symbol == s.Symbol && h.Quantity > 0)) // 还没持有
+                    .Where(s => s.Change > 0 || (s.CardBias > 0 && s.CardBiasDays > 0))
+                    .OrderByDescending(s => s.Change + s.CardBias * 5)
+                    .FirstOrDefault();
+
+                if (bullish != null)
+                {
+                    var maxQty = Math.Min((int)(investableCash / bullish.Price), 100);
+                    if (maxQty > 0)
+                    {
+                        var qty = Math.Max(10, maxQty);
+                        ai.Cash -= bullish.Price * qty;
+                        var h = ai.Stocks.FirstOrDefault(s => s.Symbol == bullish.Symbol);
+                        if (h == null)
+                        {
+                            h = new StockHolding { Symbol = bullish.Symbol };
+                            ai.Stocks.Add(h);
+                        }
+                        h.Quantity += qty;
+                        h.AvgCost = bullish.Price;
+                        AddMessage(MessageType.Info, $"【AI】{ai.Name} 买入 {bullish.Name} x{qty} @ ${bullish.Price:N0}");
+                    }
+                }
+            }
+        }
+
+        // 期货决策（仅在期货交易所）
+        if (ai.AtFuturesExchange && Room.Futures.Count > 0)
+        {
+            var investableDeposit = ai.Deposit - 1000m;
+            if (investableDeposit > 500m && _random.NextDouble() < 0.3)
+            {
+                var contract = Room.Futures
+                    .OrderByDescending(f => f.Change)
+                    .FirstOrDefault();
+
+                if (contract != null)
+                {
+                    var margin = contract.Price / 3m; // 3x杠杆
+                    if (investableDeposit >= margin)
+                    {
+                        var qty = Math.Min(5, (int)(investableDeposit / margin));
+                        if (qty > 0)
+                        {
+                            var isLong = contract.Change >= 0 || _random.NextDouble() > 0.5;
+                            ai.Deposit -= margin * qty;
+
+                            var holding = ai.FuturesHoldings?.FirstOrDefault(h => h.Symbol == contract.Symbol);
+                            if (holding == null)
+                            {
+                                holding = new FuturesHolding { Symbol = contract.Symbol };
+                                ai.FuturesHoldings ??= new List<FuturesHolding>();
+                                ai.FuturesHoldings.Add(holding);
+                            }
+
+                            if (isLong)
+                            {
+                                holding.LongQuantity += qty;
+                                holding.LongAvgCost = contract.Price;
+                                holding.LongLeverage = 3;
+                                holding.LongFrozenCost += margin * qty;
+                                AddMessage(MessageType.Info, $"【AI】{ai.Name} 做多 {contract.Name} x{qty} @ ${contract.Price:N0}（保证金 ${margin * qty:N0}）");
+                            }
+                            else
+                            {
+                                holding.ShortQuantity += qty;
+                                holding.ShortAvgCost = contract.Price;
+                                holding.ShortLeverage = 3;
+                                holding.ShortInitialMargin += margin * qty;
+                                AddMessage(MessageType.Info, $"【AI】{ai.Name} 做空 {contract.Name} x{qty} @ ${contract.Price:N0}（保证金 ${margin * qty:N0}）");
+                            }
+                        }
+                    }
+                }
+            }
+        }
     }
 
     private void HandleCellEffect(Player player, Cell cell)
@@ -794,7 +927,6 @@ public class LocalGameEngine
     public bool BuyFutures(string symbol, int quantity, int leverage = 1)
     {
         if (Room == null || HumanPlayer == null) return false;
-        if (!HumanPlayer.AtFuturesExchange) return false;
 
         var contract = Room.Futures.FirstOrDefault(f => f.Symbol == symbol);
         if (contract == null) return false;
@@ -803,10 +935,14 @@ public class LocalGameEngine
         var totalCost = contract.Price * quantity;
         var margin = totalCost / leverage;
 
+        // 站在期货交易所时，保证金要求减半（特权）
+        if (HumanPlayer.AtFuturesExchange)
+            margin = Math.Ceiling(margin / 2);
+
         // 保证金优先从存款扣（现金保留用于购买地皮）
         if (HumanPlayer.Deposit < margin)
         {
-            AddMessage(MessageType.Warning, $"存款不足支付保证金！需要 ${margin:N0}（{leverage}x杠杆），请先到银行存款");
+            AddMessage(MessageType.Warning, $"存款不足！需要 ${margin:N0}（{leverage}x杠杆），请先到银行存款");
             return false;
         }
 
@@ -834,7 +970,8 @@ public class LocalGameEngine
             holding.LongFrozenCost += margin;
         }
 
-        AddMessage(MessageType.Info, $"做多 {contract.Name} x{quantity} @ ${contract.Price:N0}（保证金 ${margin:N0}）");
+        var exchangeTag = HumanPlayer.AtFuturesExchange ? "（交易所内保证金减半）" : "";
+        AddMessage(MessageType.Info, $"做多 {contract.Name} x{quantity} @ ${contract.Price:N0}（{leverage}x杠杆，保证金 ${margin:N0}）{exchangeTag}");
         BroadcastState();
         return true;
     }
@@ -842,7 +979,6 @@ public class LocalGameEngine
     public bool ShortFutures(string symbol, int quantity, int leverage = 1)
     {
         if (Room == null || HumanPlayer == null) return false;
-        if (!HumanPlayer.AtFuturesExchange) return false;
 
         var contract = Room.Futures.FirstOrDefault(f => f.Symbol == symbol);
         if (contract == null) return false;
@@ -851,9 +987,13 @@ public class LocalGameEngine
         var totalValue = contract.Price * quantity;
         var margin = totalValue / leverage;
 
-        if (HumanPlayer.Cash < margin)
+        // 站在期货交易所时，保证金要求减半（特权）
+        if (HumanPlayer.AtFuturesExchange)
+            margin = Math.Ceiling(margin / 2);
+
+        if (HumanPlayer.Deposit < margin)
         {
-            AddMessage(MessageType.Warning, $"保证金不足！需要 ${margin:N0}（{leverage}x杠杆）");
+            AddMessage(MessageType.Warning, $"存款不足！需要 ${margin:N0}（{leverage}x杠杆），请先到银行存款");
             return false;
         }
 
@@ -881,7 +1021,8 @@ public class LocalGameEngine
             holding.ShortInitialMargin += margin;
         }
 
-        AddMessage(MessageType.Info, $"做空 {contract.Name} x{quantity} @ ${contract.Price:N0}（保证金 ${margin:N0}）");
+        var exchangeTag = HumanPlayer.AtFuturesExchange ? "（交易所内保证金减半）" : "";
+        AddMessage(MessageType.Info, $"做空 {contract.Name} x{quantity} @ ${contract.Price:N0}（{leverage}x杠杆，保证金 ${margin:N0}）{exchangeTag}");
         BroadcastState();
         return true;
     }
@@ -901,28 +1042,33 @@ public class LocalGameEngine
             if (quantity > holding.LongQuantity) quantity = holding.LongQuantity;
             if (quantity <= 0) return false;
 
-            var pnl = (contract.Price - holding.LongAvgCost) * quantity;
+            // ✅ 杠杆化盈亏：2x杠杆下，盈利翻倍
+            var pnl = (contract.Price - holding.LongAvgCost) * quantity * holding.LongLeverage;
             var marginReleased = holding.LongFrozenCost * quantity / holding.LongQuantity;
 
-            HumanPlayer.Cash += marginReleased + pnl;
+            // 释放保证金回 Deposit；盈亏入 Cash
+            HumanPlayer.Deposit += marginReleased;
+            HumanPlayer.Cash += pnl;
             holding.LongQuantity -= quantity;
             holding.LongFrozenCost -= marginReleased;
 
-            AddMessage(MessageType.Info, $"平多 {contract.Name} x{quantity} @ ${contract.Price:N0}（盈亏 ${pnl:N0}）");
+            AddMessage(MessageType.Info, $"平多 {contract.Name} x{quantity} @ ${contract.Price:N0}（{holding.LongLeverage}x杠杆，盈亏 {(pnl >= 0 ? "+" : "")}${pnl:N0}）");
         }
         else
         {
             if (quantity > holding.ShortQuantity) quantity = holding.ShortQuantity;
             if (quantity <= 0) return false;
 
-            var pnl = (holding.ShortAvgCost - contract.Price) * quantity;
+            // ✅ 杠杆化盈亏
+            var pnl = (holding.ShortAvgCost - contract.Price) * quantity * holding.ShortLeverage;
             var marginReleased = holding.ShortInitialMargin * quantity / holding.ShortQuantity;
 
-            HumanPlayer.Cash += marginReleased + pnl;
+            HumanPlayer.Deposit += marginReleased;
+            HumanPlayer.Cash += pnl;
             holding.ShortQuantity -= quantity;
             holding.ShortInitialMargin -= marginReleased;
 
-            AddMessage(MessageType.Info, $"平空 {contract.Name} x{quantity} @ ${contract.Price:N0}（盈亏 ${pnl:N0}）");
+            AddMessage(MessageType.Info, $"平空 {contract.Name} x{quantity} @ ${contract.Price:N0}（{holding.ShortLeverage}x杠杆，盈亏 {(pnl >= 0 ? "+" : "")}${pnl:N0}）");
         }
 
         if (holding.LongQuantity == 0 && holding.ShortQuantity == 0)
@@ -991,30 +1137,32 @@ public class LocalGameEngine
             }
             else
             {
-                // 方案B：现金结算 - 按当前市价折算
-                // 做空盈利 = 卖出价 > 当前价
-                var cashSettlement = holding.ShortAvgCost * quantity;
+                // 方案B：现金结算 - 退还释放的保证金 + 按当前市价结算做空盈亏
                 HumanPlayer.Cash += marginReleased;
 
-                if (contract.Price < holding.ShortAvgCost)
+                if (contract.Price > holding.ShortAvgCost)
                 {
-                    // 价格上涨，做空亏损，需要补钱
+                    // 价格上涨 → 做空亏损，需要从现金中扣除损失
                     var loss = (contract.Price - holding.ShortAvgCost) * quantity;
-                    if (HumanPlayer.Cash < -loss)
+                    if (HumanPlayer.Cash < loss)
                     {
-                        AddMessage(MessageType.Warning, $"保证金不足！现金结算需补 ${(-loss):N0}");
+                        AddMessage(MessageType.Warning, $"现金不足！做空亏损需补 ${loss:N0}，当前现金 ${HumanPlayer.Cash:N0}");
                         return false;
                     }
-                    HumanPlayer.Cash += loss;
-                    AddMessage(MessageType.Success, $"现金结算！做空亏损 ${(-loss):N0}，释放保证金 ${marginReleased:N0}");
+                    HumanPlayer.Cash -= loss;
+                    AddMessage(MessageType.Warning, $"现金结算！做空亏损 ${loss:N0}，释放保证金 ${marginReleased:N0}");
+                }
+                else if (contract.Price < holding.ShortAvgCost)
+                {
+                    // 价格下跌 → 做空盈利，加上利润
+                    var profit = (holding.ShortAvgCost - contract.Price) * quantity;
+                    HumanPlayer.Cash += profit;
+                    AddMessage(MessageType.Success, $"现金结算！做空盈利 ${profit:N0}，释放保证金 ${marginReleased:N0}");
                 }
                 else
                 {
-                    // 价格下跌，做空盈利
-                    var profit = (holding.ShortAvgCost - contract.Price) * quantity;
-                    HumanPlayer.Cash += profit;
-                    HumanPlayer.Cash += cashSettlement;
-                    AddMessage(MessageType.Success, $"现金结算！做空盈利 ${profit:N0}，获得 ${cashSettlement:N0} + ${marginReleased:N0}保证金");
+                    // 价平
+                    AddMessage(MessageType.Info, $"现金结算！价平，释放保证金 ${marginReleased:N0}");
                 }
             }
 
@@ -1028,6 +1176,260 @@ public class LocalGameEngine
         }
 
         BroadcastState();
+        return true;
+    }
+
+    // === 期货系统辅助 ===
+
+    // 维持保证金率：账户净值必须 ≥ 名义面值 × 此比例
+    private const decimal MaintenanceMarginRate = 0.25m;
+    // 追缴宽限期（天）：触发追缴后多少天未补齐则强平
+    private const int MarginCallGraceDays = 3;
+
+    /// <summary>
+    /// 每日合约期限递减 + 过期自动按市价平仓（建材多/空头除外，按交割逻辑）
+    /// </summary>
+    public void ProcessFuturesExpiry()
+    {
+        if (Room == null || HumanPlayer == null) return;
+        if (HumanPlayer.FuturesHoldings == null || HumanPlayer.FuturesHoldings.Count == 0) return;
+
+        var expiredSymbols = new List<string>();
+
+        // 1) 递减每个合约的到期日
+        foreach (var fut in Room.Futures)
+        {
+            if (fut.ExpiresInDays > 0) fut.ExpiresInDays--;
+            if (fut.ExpiresInDays <= 0 && HumanPlayer.FuturesHoldings.Any(h => h.Symbol == fut.Symbol && (h.LongQuantity + h.ShortQuantity) > 0))
+            {
+                expiredSymbols.Add(fut.Symbol);
+            }
+        }
+
+        if (expiredSymbols.Count == 0) return;
+
+        // 2) 对每个过期合约，按市价自动平仓
+        foreach (var symbol in expiredSymbols)
+        {
+            var holding = HumanPlayer.FuturesHoldings?.FirstOrDefault(h => h.Symbol == symbol);
+            if (holding == null) continue;
+
+            var contract = Room.Futures.FirstOrDefault(f => f.Symbol == symbol);
+            if (contract == null) continue;
+
+            // 多头到期：自动按市价平仓（建材→ 提示可交割但默认平仓）
+            if (holding.LongQuantity > 0)
+            {
+                var qty = holding.LongQuantity;
+                var pnl = (contract.Price - holding.LongAvgCost) * qty * holding.LongLeverage;
+                var marginReleased = holding.LongFrozenCost;
+
+                HumanPlayer.Deposit += marginReleased;
+                HumanPlayer.Cash += pnl;
+                AddMessage(MessageType.Warning,
+                    $"⏰ {contract.Name} 多头合约到期，自动平仓 {qty} 手 @ ${contract.Price:N0}（{(pnl >= 0 ? "+" : "")}${pnl:N0}）");
+                holding.LongQuantity = 0;
+                holding.LongFrozenCost = 0;
+            }
+
+            // 空头到期：建材提示交付实物，否则按市价结算
+            if (holding.ShortQuantity > 0)
+            {
+                var qty = holding.ShortQuantity;
+                var pnl = (holding.ShortAvgCost - contract.Price) * qty * holding.ShortLeverage;
+                var marginReleased = holding.ShortInitialMargin;
+
+                HumanPlayer.Deposit += marginReleased;
+                HumanPlayer.Cash += pnl;
+                AddMessage(MessageType.Warning,
+                    $"⏰ {contract.Name} 空头合约到期，自动结算 {qty} 手 @ ${contract.Price:N0}（{(pnl >= 0 ? "+" : "")}${pnl:N0}）");
+                holding.ShortQuantity = 0;
+                holding.ShortInitialMargin = 0;
+            }
+
+            if (holding.LongQuantity == 0 && holding.ShortQuantity == 0)
+            {
+                HumanPlayer.FuturesHoldings?.Remove(holding);
+            }
+
+            // 重置该合约期限（生成新一轮）
+            contract.ExpiresInDays = new Random().Next(10, 61);
+        }
+    }
+
+    /// <summary>
+    /// 计算玩家当前期货账户的风险度与维持保证金要求
+    /// </summary>
+    private (decimal totalNotional, decimal totalEquity, decimal required) CalculateFuturesRisk(Player p)
+    {
+        if (Room == null || p.FuturesHoldings == null || p.FuturesHoldings.Count == 0)
+            return (0, p.Cash + p.Deposit, 0);
+
+        decimal totalNotional = 0;
+        decimal totalEquity = p.Cash + p.Deposit;
+
+        foreach (var holding in p.FuturesHoldings)
+        {
+            var contract = Room.Futures.FirstOrDefault(f => f.Symbol == holding.Symbol);
+            if (contract == null) continue;
+
+            // 多头：名义 = 当前价 × 数量 × 杠杆；未实现盈亏加到净值
+            if (holding.LongQuantity > 0)
+            {
+                var notional = contract.Price * holding.LongQuantity * holding.LongLeverage;
+                totalNotional += notional;
+                totalEquity += (contract.Price - holding.LongAvgCost) * holding.LongQuantity * holding.LongLeverage;
+            }
+
+            // 空头：名义 = 当前价 × 数量 × 杠杆；未实现盈亏加到净值
+            if (holding.ShortQuantity > 0)
+            {
+                var notional = contract.Price * holding.ShortQuantity * holding.ShortLeverage;
+                totalNotional += notional;
+                totalEquity += (holding.ShortAvgCost - contract.Price) * holding.ShortQuantity * holding.ShortLeverage;
+            }
+        }
+
+        var required = totalNotional * MaintenanceMarginRate;
+        return (totalNotional, totalEquity, required);
+    }
+
+    /// <summary>
+    /// 每日检测追缴与强平：净值 < 维持保证金 → 追缴；追缴到期未补 → 强平
+    /// </summary>
+    public void CheckFuturesMarginCall()
+    {
+        if (Room == null) return;
+
+        foreach (var p in Room.Players)
+        {
+            if (p.IsBankrupt) continue;
+            if (p.FuturesHoldings == null || p.FuturesHoldings.Count == 0)
+            {
+                // 没有持仓 → 清空追缴状态
+                if (p.MarginCallDeadline > 0)
+                {
+                    p.MarginCallDeadline = -1;
+                    p.MarginCallRequired = 0;
+                    p.MarginCallContracts?.Clear();
+                }
+                continue;
+            }
+
+            var (notional, equity, required) = CalculateFuturesRisk(p);
+
+            // === 当前处于追缴状态 ===
+            if (p.MarginCallDeadline > 0)
+            {
+                // 检查是否已补齐（净值 ≥ 名义 × 0.30，临时阈值）
+                if (equity >= notional * 0.30m)
+                {
+                    p.MarginCallDeadline = -1;
+                    p.MarginCallRequired = 0;
+                    p.MarginCallContracts?.Clear();
+                    AddMessage(MessageType.Success, $"{p.Name} 已补足保证金，追缴解除！");
+                }
+                else
+                {
+                    p.MarginCallDeadline--;
+                    if (p.MarginCallDeadline <= 0)
+                    {
+                        // 强平所有持仓
+                        ForceCloseAllFutures(p, "追缴逾期未补");
+                    }
+                    else
+                    {
+                        var gap = required - equity;
+                        AddMessage(MessageType.Warning,
+                            $"⚠️ {p.Name} 追缴中！还需补 ${gap:N0}（剩 {p.MarginCallDeadline} 天）");
+                    }
+                }
+                continue;
+            }
+
+            // === 正常检测：净值 < 维持保证金 → 触发追缴 ===
+            if (equity < required && notional > 0)
+            {
+                var gap = required - equity;
+                p.MarginCallDeadline = MarginCallGraceDays;
+                p.MarginCallRequired = gap;
+                p.MarginCallContracts = p.FuturesHoldings
+                    .Where(h => h.LongQuantity + h.ShortQuantity > 0)
+                    .Select(h => h.Symbol)
+                    .ToList();
+                AddMessage(MessageType.Error,
+                    $"🚨 {p.Name} 期货账户触发追缴！需补 ${gap:N0}，{MarginCallGraceDays} 天内未补齐将强平！");
+            }
+        }
+    }
+
+    /// <summary>
+    /// 强平玩家所有期货持仓，按市价结算（扣未实现盈亏 + 释放保证金）
+    /// </summary>
+    private void ForceCloseAllFutures(Player p, string reason)
+    {
+        if (Room == null) return;
+        if (p.FuturesHoldings == null) return;
+
+        foreach (var holding in p.FuturesHoldings.ToList())
+        {
+            var contract = Room.Futures.FirstOrDefault(f => f.Symbol == holding.Symbol);
+            if (contract == null) continue;
+
+            if (holding.LongQuantity > 0)
+            {
+                var pnl = (contract.Price - holding.LongAvgCost) * holding.LongQuantity * holding.LongLeverage;
+                p.Deposit += holding.LongFrozenCost;
+                p.Cash += pnl;
+                AddMessage(MessageType.Error,
+                    $"💥 强平 {contract.Name} 多头 {holding.LongQuantity} 手 @ ${contract.Price:N0}（{reason}，盈亏 {(pnl >= 0 ? "+" : "")}${pnl:N0}）");
+                holding.LongQuantity = 0;
+                holding.LongFrozenCost = 0;
+            }
+
+            if (holding.ShortQuantity > 0)
+            {
+                var pnl = (holding.ShortAvgCost - contract.Price) * holding.ShortQuantity * holding.ShortLeverage;
+                p.Deposit += holding.ShortInitialMargin;
+                p.Cash += pnl;
+                AddMessage(MessageType.Error,
+                    $"💥 强平 {contract.Name} 空头 {holding.ShortQuantity} 手 @ ${contract.Price:N0}（{reason}，盈亏 {(pnl >= 0 ? "+" : "")}${pnl:N0}）");
+                holding.ShortQuantity = 0;
+                holding.ShortInitialMargin = 0;
+            }
+
+            if (holding.LongQuantity == 0 && holding.ShortQuantity == 0)
+            {
+                p.FuturesHoldings.Remove(holding);
+            }
+        }
+
+        p.MarginCallDeadline = -1;
+        p.MarginCallRequired = 0;
+        p.MarginCallContracts?.Clear();
+    }
+
+    /// <summary>
+    /// 玩家主动补缴保证金：把现金转入 Deposit 以提升净值
+    /// </summary>
+    public bool DepositToMargin(string playerName, decimal amount)
+    {
+        var p = Room?.Players.FirstOrDefault(x => x.Name == playerName);
+        if (p == null) return false;
+        if (p.MarginCallDeadline <= 0)
+        {
+            AddMessage(MessageType.Warning, $"{p.Name} 当前未处于追缴状态");
+            return false;
+        }
+        if (amount <= 0 || amount > p.Cash)
+        {
+            AddMessage(MessageType.Warning, $"补缴金额无效（需要 > 0 且 ≤ 现金 ${p.Cash:N0}）");
+            return false;
+        }
+
+        p.Cash -= amount;
+        p.Deposit += amount;
+        AddMessage(MessageType.Success, $"{p.Name} 补缴保证金 ${amount:N0}");
         return true;
     }
 
@@ -1142,7 +1544,8 @@ public class LocalGameEngine
 
         var proceeds = stock.Price * quantity;
         var marginReturned = holding.AvgCost * quantity / holding.LongLeverage;
-        HumanPlayer.Deposit += proceeds + marginReturned;
+        // 保证金解冻：只还保证金（proceeds 已在买时通过减少存款冻结了"保证金"，不是额外现金）
+        HumanPlayer.Deposit += marginReturned;
         holding.Quantity -= quantity;
 
         var pnl = (stock.Price - holding.AvgCost) * quantity * holding.LongLeverage;
@@ -1215,9 +1618,14 @@ public class LocalGameEngine
         }
 
         HumanPlayer.Cash -= cost;
+        // 返还保证金 = 该批做空冻结的保证金（全量返还，因为保证金 = 面值 / leverage）
         var marginReturned = stock.Price * quantity / holding.ShortLeverage;
         HumanPlayer.Deposit += marginReturned;
         holding.ShortQuantity -= quantity;
+        holding.ShortMarginFrozen -= marginReturned;
+        if (holding.ShortQuantity == 0)
+            holding.ShortMarginFrozen = 0;
+        holding.ShortCashReceived -= cost;
 
         var pnl = (holding.ShortAvgCost - stock.Price) * quantity * holding.ShortLeverage;
         AddMessage(MessageType.Info, $"平空 {stock.Name} x{quantity} @${stock.Price} ({holding.ShortLeverage}x杠杆)！解冻保证金 ${marginReturned:N0}，盈亏 {(pnl >= 0 ? "+" : "")}${pnl:N0}");
@@ -1509,11 +1917,30 @@ public class LocalGameEngine
         var auction = Room.ActiveAuction;
         auction.Closed = true;
 
+        // 报告报价情况：谁参与 / 谁弃权
+        var bidders = Room.AuctionBids.ToList();
+        var participated = bidders.Count;
+        var forfeited = Room.Players.Count(p => !p.IsBankrupt && !bidders.Any(b => b.Key == p.Id));
+
+        if (participated > 0)
+        {
+            var bidSummary = string.Join("、",
+                bidders.Select(b => $"{Room.Players.FirstOrDefault(p => p.Id == b.Key)?.Name ?? "?"} ${b.Value:N0}"));
+            AddMessage(MessageType.Info, $"📋 报价汇总：{bidSummary}");
+        }
+        if (forfeited > 0)
+        {
+            var forfeitNames = string.Join("、",
+                Room.Players.Where(p => !p.IsBankrupt && !bidders.Any(b => b.Key == p.Id))
+                            .Select(p => p.Name));
+            AddMessage(MessageType.Warning, $"❌ 弃权：{forfeitNames}（{forfeited}人未报价）");
+        }
+
         // 找出最高出价
         var maxBid = Room.AuctionBids.Values.DefaultIfEmpty(0).Max();
         if (maxBid < auction.ReservePrice)
         {
-            AddMessage(MessageType.Info, $"拍卖结束！最高出价 ${maxBid:N0} 低于底价，本轮流拍。");
+            AddMessage(MessageType.Info, $"⏹️ 拍卖结束！最高出价 ${maxBid:N0} 低于底价 ${auction.ReservePrice:N0}，本轮流拍。");
         }
         else
         {
@@ -1525,13 +1952,20 @@ public class LocalGameEngine
             }
             else
             {
-                winner.Cash -= maxBid;
-                auction.WinnerId = winner.Id;
-                auction.FinalPrice = maxBid;
-                winner.Properties.Add(1000 + Room.AuctionedProperties.Count); // 商业用地位于虚拟id >=1000
+                if (winner.Cash < maxBid)
+                {
+                    AddMessage(MessageType.Warning, $"⚠️ {winner.Name} 现金不足支付 ${maxBid:N0}，本轮流拍！");
+                }
+                else
+                {
+                    winner.Cash -= maxBid;
+                    auction.WinnerId = winner.Id;
+                    auction.FinalPrice = maxBid;
+                    winner.Properties.Add(1000 + Room.AuctionedProperties.Count); // 商业用地位于虚拟id >=1000
 
-                AddMessage(MessageType.Success, $"🎉 拍卖结束！{winner.Name} 以 ${maxBid:N0} 拍得 {auction.Name}！");
-                AddMessage(MessageType.Info, $"💡 该商业用地可在任意时刻半价升级（也可在地皮界面或用升级卡）");
+                    AddMessage(MessageType.Success, $"🎉 拍卖结束！{winner.Name} 以 ${maxBid:N0} 拍得 {auction.Name}！");
+                    AddMessage(MessageType.Info, $"💡 该商业用地可在任意时刻半价升级（也可在地皮界面或用升级卡）");
+                }
             }
         }
 
@@ -1570,6 +2004,16 @@ public class LocalGameEngine
         if (Room == null) return;
 
         Room.DiceValue = null;
+
+        // 重置本回合的"是否在交易所/市场"标志位（玩家下次需要重新走到对应地块）
+        foreach (var player in Room.Players)
+        {
+            if (player.IsBankrupt) continue;
+            player.AtStockExchange = false;
+            player.AtFuturesExchange = false;
+            player.AtMarket = false;
+            player.PassedBank = false;
+        }
 
         // 处理每回合顶级升级产出
         foreach (var player in Room.Players)
@@ -1695,35 +2139,34 @@ public class LocalGameEngine
             Room.GameDate = prevDate.AddDays(1).ToString("yyyy-MM-dd");
 
             // 每月第一天更新通胀（每30天）
-            if (Room.CurrentTurn % 30 == 1 && Room.CurrentTurn > 1)
+            // === 每日通胀推进 + 动态通胀率 ===
+            // 通胀率受宏观经济因子 MacroInflation 影响（范围 -1~+1）
+            // 基准月通胀率 2%，宏观因子影响 ±6%（即月度通胀约 -4% ~ +8%）
+            var monthlyRate = 0.02m + Room.MacroInflation * 0.06m;
+            Room.InflationRate = Math.Clamp(monthlyRate, -0.05m, 0.15m);
+
+            // 按日复利推进通胀倍数（等效月度利率）
+            // 例：月通胀 6% → 日因子 (1.06)^(1/30) ≈ 1.00193（约 0.193%/日）
+            Room.InflationMultiplier *= (decimal)Math.Pow((double)(1m + Room.InflationRate), 1.0 / 30.0);
+
+            // 每月第一天（30 天的整数倍）报告 + 月份递增
+            if (Room.CurrentTurn > 1 && (Room.CurrentTurn - 1) % 30 == 0)
             {
                 Room.CurrentMonth++;
-                Room.InflationMultiplier *= (1 + Room.InflationRate);
-                Room.CementPrice = 100 * Room.InflationMultiplier;
-                Room.SteelPrice = 200 * Room.InflationMultiplier;
-                Room.RubberPrice = 150 * Room.InflationMultiplier;
-                Room.PreciousMetalsPrice = 500 * Room.InflationMultiplier;
-                Room.DiamondsPrice = 1000 * Room.InflationMultiplier;
-
-                // 同步期货市场的建材/贵金属价格基准
-                foreach (var fut in Room.Futures)
-                {
-                    switch (fut.Type)
-                    {
-                        case FuturesType.Cement: fut.Base = Room.CementPrice; break;
-                        case FuturesType.Steel: fut.Base = Room.SteelPrice; break;
-                        case FuturesType.Rubber: fut.Base = Room.RubberPrice; break;
-                        case FuturesType.Gold: fut.Base = Room.PreciousMetalsPrice; break;
-                        case FuturesType.Silver: fut.Base = Room.PreciousMetalsPrice * 0.2m; break;
-                        case FuturesType.Diamond: fut.Base = Room.DiamondsPrice; break;
-                    }
-                }
-
-                AddMessage(MessageType.Warning, $"📈 第{Room.CurrentMonth}月通货膨胀率2%！所有物价上涨！");
+                var pct = Room.InflationRate * 100m;
+                var icon = pct >= 0 ? "📈" : "📉";
+                AddMessage(MessageType.Warning,
+                    $"{icon} 第{Room.CurrentMonth}月通胀率 {pct:F1}%（物价累计 {Room.InflationMultiplier:F3}x）");
             }
 
-            // 每日股票/期货更新
+            // 每日股票/期货更新（含 ApplyMacro 每日波动）
             UpdateMarket();
+
+            // === 期货到期检查 + 自动结算 ===
+            ProcessFuturesExpiry();
+
+            // === 期货账户追缴/强平检查 ===
+            CheckFuturesMarginCall();
 
             // 记录市场价格历史
             Room.MarketPriceHistory.Add(new MarketPriceTick
@@ -1738,7 +2181,8 @@ public class LocalGameEngine
             if (Room.MarketPriceHistory.Count > 60)
                 Room.MarketPriceHistory.RemoveAt(0);
 
-            // 拍卖逻辑（每7天）——如有上一轮拍卖先结算
+            // 拍卖逻辑：每 7 天开启一次商业用地拍卖
+            // 新拍卖启动时，立即结算上一拍卖（按"当天结束结算"语义）
             if (Room.CurrentTurn % 7 == 0)
             {
                 if (Room.ActiveAuction != null && !Room.ActiveAuction.Closed)
@@ -1746,6 +2190,12 @@ public class LocalGameEngine
                     CloseAuction();
                 }
                 StartAuction();
+            }
+            // 拍卖如果在当天结束都未结算，下个新玩家回合自动结算
+            else if (Room.ActiveAuction != null && !Room.ActiveAuction.Closed &&
+                     Room.CurrentTurn > Room.ActiveAuction.ClosesOnDay)
+            {
+                CloseAuction();
             }
 
             AddMessage(MessageType.Info, $"===== 第 {Room.CurrentTurn} 天 =====");
@@ -1921,8 +2371,11 @@ public class LocalGameEngine
             stock.LimitUp = stock.Change >= 10;
             stock.LimitDown = stock.Change <= -10;
 
-            // 生成利好/利空新闻（约5%概率），持续1-5天
-            if (stock.News == null && _random.NextDouble() < 0.05)
+            // 生成利好/利空新闻：每天必触发（保底 1 条/天），单只股票独立滚动
+            // - 每只股票每天单独 12% 概率追加新闻（多条可能并存但只显示最新）
+            // - 如已无 News，每天 18% 概率重新触发一条新的
+            // - 配合"每天至少 1 条"的全市场扫描保证（见下方）
+            if (stock.News == null && _random.NextDouble() < 0.18)
             {
                 var isBullish = _random.NextDouble() > 0.5;
                 var newsTemplates = isBullish
@@ -1943,6 +2396,8 @@ public class LocalGameEngine
                 stock.News = newsTemplates[_random.Next(newsTemplates.Length)];
                 stock.EventDays = _random.Next(1, 6);
                 stock.NewsTriggered = false; // 新闻开始，立即参与今天的 range
+                System.IO.File.AppendAllText("game_log.txt",
+                    $"[NEWS] {DateTime.Now:HH:mm:ss} Day={Room.CurrentTurn} tick触发: {stock.Symbol} {stock.Name} | 模板={stock.News} | 持续={stock.EventDays}天\n");
             }
             else if (stock.EventDays > 0)
             {
@@ -1985,6 +2440,44 @@ public class LocalGameEngine
                 $"  K线 #{stock.History.Count - 1}: O={Math.Round(oldPrice, 2):F2} C={Math.Round(stock.Price, 2):F2} H={Math.Round(intraHigh, 2):F2} L={Math.Round(intraLow, 2):F2} | PrevClose={prevCloseCheck:F2} | GapOpenVsPrevClose={Math.Round(oldPrice - prevCloseCheck, 2):F2}\n");
             // 保留最近60根K线
             if (stock.History.Count > 60) stock.History.RemoveAt(0);
+        }
+
+        // === 每日新闻兜底：保证每天至少 1 条利好或利空出现在全市场 ===
+        // 之前 18% 单只概率下，可能某一天所有股票都没触发新闻
+        // 这里加一道兜底：找出今天尚未触发新闻的股票，随机选 1~2 只强制触发
+        var stocksWithoutNews = Room.Stocks.Where(s => string.IsNullOrEmpty(s.News)).ToList();
+        if (stocksWithoutNews.Count > 0)
+        {
+            // 30% 概率强制出 1 条新闻（保证约 30% 工作日至少 1 条新闻出现）
+            if (_random.NextDouble() < 0.30)
+            {
+                var pickCount = _random.NextDouble() < 0.3 ? 2 : 1; // 30% 出 2 条
+                var picked = stocksWithoutNews.OrderBy(_ => _random.Next()).Take(pickCount).ToList();
+                foreach (var stock in picked)
+                {
+                    var isBullish = _random.NextDouble() > 0.5;
+                    var newsTemplates = isBullish
+                        ? new[] {
+                            $"🔥 {stock.Name} 业绩预增，机构看好！",
+                            $"📈 {stock.Name} 获得大订单，后市看涨！",
+                            $"💰 {stock.Name} 分红超预期，利好公告！",
+                            $"🚀 {stock.Name} 技术突破，股价飙升！",
+                            $"🌟 {stock.Name} 入选指数成分股！"
+                        }
+                        : new[] {
+                            $"⚠️ {stock.Name} 遭遇做空，警惕风险！",
+                            $"📉 {stock.Name} 业绩不及预期，下调评级！",
+                            $"🔻 {stock.Name} 高管减持，股价承压！",
+                            $"💸 {stock.Name} 债务压力加剧！",
+                            $"⚡ {stock.Name} 面临监管调查！"
+                        };
+                    stock.News = newsTemplates[_random.Next(newsTemplates.Length)];
+                    stock.EventDays = _random.Next(1, 6);
+                    stock.NewsTriggered = false;
+                    System.IO.File.AppendAllText("game_log.txt",
+                        $"[NEWS_FALLBACK] {DateTime.Now:HH:mm:ss} Day={Room.CurrentTurn} 全市场兜底触发: {stock.Symbol} {stock.Name} | 模板={stock.News} | 持续={stock.EventDays}天\n");
+                }
+            }
         }
 
         foreach (var futures in Room.Futures)
@@ -2067,13 +2560,15 @@ public class LocalGameEngine
             Type = pick.type,
             ReservePrice = reserve,
             Day = Room.CurrentTurn,
+            ClosesOnDay = Room.CurrentTurn, // 当天结束就结算
             Closed = false,
             Level = 0
         };
         Room.AuctionBids.Clear();
 
         AddMessage(MessageType.Warning, $"📢 拍卖开始！商业用地：{pick.name}（底价 ${reserve:N0}）");
-        AddMessage(MessageType.Info, $"所有玩家可在该回合内暗标出价，回合结束时最高价获得。");
+        AddMessage(MessageType.Info, $"⏰ 所有玩家在本回合内出价，结束回合时立即结算。");
+        AddMessage(MessageType.Info, $"❗ 未提交出价 = 弃权。中标价 ≥ 底价才成交，否则流拍。");
 
         BroadcastState();
     }
@@ -2297,6 +2792,8 @@ public class LocalGameEngine
                 Unit = 1,
                 Change = Math.Round((decimal)(r.NextDouble() * 10 - 5), 2),
                 IsMaterial = category == FuturesCategory.Material,
+                // 每个合约初始剩余天数随机（10-60天），避免同时到期
+                ExpiresInDays = r.Next(10, 61),
                 // 市场参与者倾向
                 RetailBias = retailBias,
                 InstitutionBias = institutionBias,

@@ -51,6 +51,18 @@
                                 <TextBlock x:Name="CashText" Text="$0" Foreground="#9ece6a" FontSize="10" FontWeight="Bold" Margin="4,0,0,0"/>
                             </StackPanel>
                         </Grid>
+
+                        <!-- 追缴/到期警告横幅 -->
+                        <Border x:Name="MarginCallBanner" Background="#7f1d1d" CornerRadius="6" Padding="10,8" Margin="0,10,0,0" Visibility="Collapsed">
+                            <StackPanel>
+                                <TextBlock x:Name="MarginCallTitle" Text="🚨 期货账户追缴" Foreground="#fecaca" FontSize="12" FontWeight="Bold"/>
+                                <TextBlock x:Name="MarginCallDetail" Text="" Foreground="#fecaca" FontSize="10" Margin="0,4,0,6" TextWrapping="Wrap"/>
+                                <StackPanel Orientation="Horizontal">
+                                    <Button x:Name="DepositToMarginBtn" Content="💰 补缴保证金" Padding="10,4" Background="#dc2626" Foreground="White" BorderThickness="0" Click="DepositToMarginBtn_Click" Cursor="Hand"/>
+                                    <TextBlock x:Name="MarginCallAmount" Text="" Foreground="#fecaca" FontSize="10" VerticalAlignment="Center" Margin="12,0,0,0"/>
+                                </StackPanel>
+                            </StackPanel>
+                        </Border>
                     </StackPanel>
                 </Border>
 
@@ -251,7 +263,7 @@
                                     <TextBlock x:Name="MarginText" Text="$0" Foreground="#7dcfff" FontSize="10" FontWeight="Bold" HorizontalAlignment="Right"/>
                                 </Grid>
                                 <Grid Margin="0,4,0,0">
-                                    <TextBlock Text="手续费(2%)" Foreground="#565f89" FontSize="10"/>
+                                    <TextBlock Text="手续费" Foreground="#565f89" FontSize="10"/>
                                     <TextBlock x:Name="FeeText" Text="$0" Foreground="#565f89" FontSize="10" HorizontalAlignment="Right"/>
                                 </Grid>
                                 <Border BorderThickness="0,1,0,0" BorderBrush="#3d4148" Margin="0,6,0,0" Padding="0,6,0,0">

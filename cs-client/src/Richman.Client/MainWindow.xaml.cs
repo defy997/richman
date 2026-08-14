@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
@@ -291,19 +291,73 @@ public partial class MainWindow : Window
     {
         Dispatcher.BeginInvoke(() =>
         {
-            ViewModel.Messages.Add(message);
-
-            var logItems = MessageLog.ItemsSource as IList<object> ?? new List<object>();
-            var newList = new List<object>(logItems) { message };
-            MessageLog.ItemsSource = newList;
-
-            if (MessageLog.Items.Count > 0)
+            // === 消息可见性过滤 ===
+            // 1. 如果玩家打开了 modal（如股票交易所、拍卖行等）：暂停消息显示
+            //    避免离开交易所后还看到其他玩家的回合消息
+            // 2. 恢复时：仅恢复和自己相关、或当前是玩家自己回合的消息
+            if (_suppressMessages)
             {
-                MessageLog.ScrollIntoView(MessageLog.Items[MessageLog.Items.Count - 1]);
+                _pendingMessages.Add(message);
+                return;
             }
 
-            if (newList.Count > 200) newList.RemoveAt(0);
+            // 只在轮到玩家自己回合时显示 AI/其他玩家的回合消息
+            // 自己回合里的交易/操作消息始终显示
+            if (_gameEngine.Room?.Players != null)
+            {
+                var currentPlayer = _gameEngine.Room.Players[_gameEngine.Room.CurrentPlayerIndex];
+                var isMyTurn = currentPlayer?.Id == _gameEngine.HumanPlayer?.Id;
+
+                if (!isMyTurn)
+                {
+                    // AI/其他玩家回合——只显示与自己相关的消息
+                    var myName = _gameEngine.HumanPlayer?.Name;
+                    var isRelevant = !string.IsNullOrEmpty(myName) &&
+                                     message.Content.Contains(myName, StringComparison.Ordinal);
+                    if (!isRelevant) return;
+                }
+            }
+
+            AppendMessage(message);
         });
+    }
+
+    private bool _suppressMessages = false;
+    private readonly List<GameMessage> _pendingMessages = new();
+
+    private void AppendMessage(GameMessage message)
+    {
+        ViewModel.Messages.Add(message);
+
+        var logItems = MessageLog.ItemsSource as IList<object> ?? new List<object>();
+        var newList = new List<object>(logItems) { message };
+        MessageLog.ItemsSource = newList;
+
+        // suppress 期间不滚动（modal 关闭后由 ResumeMessages 统一滚动）
+        if (!_suppressMessages && MessageLog.Items.Count > 0)
+        {
+            Dispatcher.BeginInvoke(new Action(() =>
+            {
+                if (MessageLog.Items.Count > 0)
+                    MessageLog.ScrollIntoView(MessageLog.Items[MessageLog.Items.Count - 1]);
+            }), System.Windows.Threading.DispatcherPriority.Loaded);
+        }
+
+        if (newList.Count > 200) newList.RemoveAt(0);
+    }
+
+    /// <summary>暂停消息显示（玩家打开 modal 时调用）。</summary>
+    public void SuppressMessages()
+    {
+        _suppressMessages = true;
+        _pendingMessages.Clear();
+    }
+
+    /// <summary>恢复消息显示——pending 不补发，关闭 modal 时统一开始接收新消息。</summary>
+    public void ResumeMessages()
+    {
+        _suppressMessages = false;
+        _pendingMessages.Clear();
     }
 
     private void UpdateUI()
@@ -550,30 +604,42 @@ public partial class MainWindow : Window
         }
 
         // 后绘制玩家标记（确保在最上层）
-        foreach (var player in room.Players.Where(p => !p.IsBankrupt))
+        // 按格子分组，相同格子内的玩家用 2x2 网格偏移避免重叠
+        var playersByCell = room.Players
+            .Where(p => !p.IsBankrupt)
+            .GroupBy(p => p.Position)
+            .ToDictionary(g => g.Key, g => g.ToList());
+        foreach (var (cellIdx, playersHere) in playersByCell)
         {
-            int i = player.Position;
             int x, y;
-            if (i < 16) { x = i; y = 0; }
-            else if (i < 32) { x = 15; y = i - 16; }
-            else if (i < 48) { x = 47 - i; y = 15; }
-            else { x = 0; y = 63 - i; }
+            if (cellIdx < 16) { x = cellIdx; y = 0; }
+            else if (cellIdx < 32) { x = 15; y = cellIdx - 16; }
+            else if (cellIdx < 48) { x = 47 - cellIdx; y = 15; }
+            else { x = 0; y = 63 - cellIdx; }
 
             double left = margin + x * cellSize;
             double top = margin + y * cellSize;
 
-            var ellipse = new Ellipse
+            for (int pi = 0; pi < playersHere.Count; pi++)
             {
-                Width = 12,
-                Height = 12,
-                Fill = new SolidColorBrush((Color)ColorConverter.ConvertFromString(player.Color)),
-                Stroke = Brushes.White,
-                StrokeThickness = 1.5,
-                Tag = $"player_{player.Id}"
-            };
-            Canvas.SetLeft(ellipse, left + cellSize / 2 - 6);
-            Canvas.SetTop(ellipse, top + 2);
-            GameBoard.Children.Add(ellipse);
+                var player = playersHere[pi];
+                // 2x2 网格偏移：第一格 (4,2)、第二格 (4,10)、第三格 (12,2)、第四格 (12,10)
+                var colOffset = (pi % 2) * 8 + 4;
+                var rowOffset = (pi / 2) * 8 + 2;
+
+                var ellipse = new Ellipse
+                {
+                    Width = 12,
+                    Height = 12,
+                    Fill = new SolidColorBrush((Color)ColorConverter.ConvertFromString(player.Color)),
+                    Stroke = Brushes.White,
+                    StrokeThickness = 1.5,
+                    Tag = $"player_{player.Id}"
+                };
+                Canvas.SetLeft(ellipse, left + colOffset);
+                Canvas.SetTop(ellipse, top + rowOffset);
+                GameBoard.Children.Add(ellipse);
+            }
         }
 
         // 浮动按钮已移除——只保留右侧按钮
@@ -933,12 +999,28 @@ public partial class MainWindow : Window
             _stockModal = new StockModal();
             _stockModal.OnTrade += (symbol, qty, action, leverage) =>
             {
+                var stock = _gameEngine.Room?.Stocks.FirstOrDefault(s => s.Symbol == symbol);
+                var stockName = stock?.Name ?? symbol;
+                var margin = (stock?.Price ?? 0) * qty / leverage;
                 switch (action)
                 {
-                    case "buy": _gameEngine.BuyStock(symbol, qty, leverage); break;
-                    case "sell": _gameEngine.SellStock(symbol, qty); break;
-                    case "short": _gameEngine.ShortStock(symbol, qty, leverage); break;
-                    case "cover": _gameEngine.CoverShort(symbol, qty); break;
+                    case "buy":
+                        // 先显示结果（绕过 modal suppress），再执行逻辑
+                        AppendMessage(new GameMessage { Type = MessageType.Info, Content = $"💹 买入 {stockName} x{qty} @${stock?.Price:N0} ({leverage}x杠杆) 成功！冻结保证金 ${margin:N0}" });
+                        _gameEngine.BuyStock(symbol, qty, leverage);
+                        break;
+                    case "sell":
+                        AppendMessage(new GameMessage { Type = MessageType.Info, Content = $"💸 卖出 {stockName} x{qty} @${stock?.Price:N0}" });
+                        _gameEngine.SellStock(symbol, qty);
+                        break;
+                    case "short":
+                        AppendMessage(new GameMessage { Type = MessageType.Info, Content = $"📉 做空 {stockName} x{qty} @${stock?.Price:N0} ({leverage}x杠杆) 成功！冻结保证金 ${margin:N0}" });
+                        _gameEngine.ShortStock(symbol, qty, leverage);
+                        break;
+                    case "cover":
+                        AppendMessage(new GameMessage { Type = MessageType.Info, Content = $"🔁 买回平空 {stockName} x{qty} @${stock?.Price:N0}" });
+                        _gameEngine.CoverShort(symbol, qty);
+                        break;
                 }
             };
             _stockModal.OnTradeComplete += () =>
@@ -950,7 +1032,7 @@ public partial class MainWindow : Window
             _stockModal.Owner = this;
         }
         _stockModal?.Update(_gameEngine.Room?.Stocks ?? new List<Stock>(), _gameEngine.HumanPlayer, _gameEngine.Room?.Players);
-        _stockModal?.Show();
+        ShowModal(_stockModal);
     }
 
     private void OpenFuturesPanel_Click(object sender, RoutedEventArgs e)
@@ -960,32 +1042,43 @@ public partial class MainWindow : Window
             _futuresModal = new FuturesModal();
             _futuresModal.OnTrade += (symbol, qty, action, leverage) =>
             {
+                bool success;
                 switch (action)
                 {
                     case "buy":
-                        _gameEngine.BuyFutures(symbol, qty, leverage);
+                        success = _gameEngine.BuyFutures(symbol, qty, leverage);
                         break;
                     case "sell":
-                        _gameEngine.ShortFutures(symbol, qty, leverage);
+                        success = _gameEngine.ShortFutures(symbol, qty, leverage);
                         break;
                     case "close":
-                        _gameEngine.CloseFutures(symbol, qty, 1);
+                        success = _gameEngine.CloseFutures(symbol, qty, 1);
                         break;
                     case "close_short":
-                        _gameEngine.CloseFutures(symbol, qty, -1);
+                        success = _gameEngine.CloseFutures(symbol, qty, -1);
                         break;
                     case "delivery":
-                        _gameEngine.DeliverFutures(symbol, qty, true);
+                        success = _gameEngine.DeliverFutures(symbol, qty, true);
                         break;
                     case "delivery_short":
-                        _gameEngine.DeliverFutures(symbol, qty, false);
+                        success = _gameEngine.DeliverFutures(symbol, qty, false);
+                        break;
+                    default:
+                        success = false;
                         break;
                 }
+                if (success)
+                    _futuresModal.Update(_gameEngine.Room?.Futures ?? new List<FuturesContract>(), _gameEngine.HumanPlayer);
+                return success;
+            };
+            _futuresModal.OnDepositToMargin += (playerName, amount) =>
+            {
+                _gameEngine.DepositToMargin(playerName, amount);
             };
             _futuresModal.Owner = this;
         }
         _futuresModal?.Update(_gameEngine.Room?.Futures ?? new List<FuturesContract>(), _gameEngine.HumanPlayer);
-        _futuresModal?.Show();
+        ShowModal(_futuresModal);
     }
 
     private void OpenBankPanel_Click(object sender, RoutedEventArgs e)
@@ -998,7 +1091,7 @@ public partial class MainWindow : Window
             _bankModal.OnTakeLoan += amount => _gameEngine.TakeLoan(amount);
         }
         _bankModal?.Update(_gameEngine.HumanPlayer, _gameEngine.Room);
-        _bankModal?.Show();
+        ShowModal(_bankModal);
     }
 
     private void OpenMarketPanel_Click(object sender, RoutedEventArgs e)
@@ -1010,7 +1103,7 @@ public partial class MainWindow : Window
             _marketModal.Owner = this;
         }
         _marketModal?.Update(_gameEngine.Room, _gameEngine.HumanPlayer);
-        _marketModal?.Show();
+        ShowModal(_marketModal);
     }
 
     private void OpenRealEstatePanel_Click(object sender, RoutedEventArgs e)
@@ -1024,7 +1117,7 @@ public partial class MainWindow : Window
             _realEstateModal.OnSellToCenter += cellId => _gameEngine.SellPropertyToCenter(cellId);
         }
         _realEstateModal?.Update(_gameEngine.HumanPlayer, _gameEngine.Room);
-        _realEstateModal?.Show();
+        ShowModal(_realEstateModal);
     }
 
     private void OpenCardPanel_Click(object sender, RoutedEventArgs e)
@@ -1044,6 +1137,15 @@ public partial class MainWindow : Window
 
         var isMyTurn = _gameEngine.Room?.Players[_gameEngine.Room.CurrentPlayerIndex]?.Id == _gameEngine.HumanPlayer?.Id;
         _cardModal?.Update(_gameEngine.HumanPlayer, _gameEngine.Room?.Stocks, isMyTurn);
-        _cardModal?.Show();
+        ShowModal(_cardModal);
+    }
+
+    /// <summary>显示 modal 并在关闭时自动恢复消息流。</summary>
+    private void ShowModal(Window? modal)
+    {
+        if (modal == null) return;
+        SuppressMessages();
+        modal.Closed += (_, _) => ResumeMessages();
+        modal.Show();
     }
 }

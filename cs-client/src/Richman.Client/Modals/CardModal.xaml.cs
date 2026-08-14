@@ -134,6 +134,8 @@ public partial class CardModal : Window
             case "护盾卡":
                 StockSelectPanel.Visibility = Visibility.Visible;
                 StockList.ItemsSource = _stocks;
+                _selectedTarget = null;
+                UpdateStockSelection();
                 ExecuteUseBtn.IsEnabled = false;
                 break;
             case "谣言卡":
@@ -183,7 +185,26 @@ public partial class CardModal : Window
         if (sender is Button btn && btn.Tag is string symbol)
         {
             _selectedTarget = symbol;
+            UpdateStockSelection();
             ExecuteUseBtn.IsEnabled = true;
+        }
+    }
+
+    private void UpdateStockSelection()
+    {
+        foreach (var child in ((Panel)StockList.Parent).Children)
+        {
+            if (child is Button btn && btn.Tag is string symbol)
+            {
+                var isSelected = symbol == _selectedTarget;
+                btn.Background = isSelected
+                    ? new SolidColorBrush(Color.FromRgb(219, 39, 119))  // 红心卡：红色高亮
+                    : new SolidColorBrush(Color.FromRgb(55, 65, 81));
+                btn.BorderBrush = isSelected
+                    ? new SolidColorBrush(Colors.White)
+                    : Brushes.Transparent;
+                btn.BorderThickness = new Thickness(isSelected ? 2 : 0);
+            }
         }
     }
 
@@ -233,7 +254,20 @@ public partial class CardModal : Window
             target = _selectedTarget;
         }
 
-        // 先 invoke，再清状态。如果 invoke 抛了，至少状态已清
+        // 先显示确认弹窗（只有在选中了目标时才弹出）
+        string? confirmTargetName = null;
+        if (target != null && (cardName == "红心卡" || cardName == "黑心卡" || cardName == "护盾卡"))
+        {
+            confirmTargetName = _stocks.FirstOrDefault(s => s.Symbol == target)?.Name ?? target;
+        }
+
+        var confirmMsg = confirmTargetName != null
+            ? $"确定对「{confirmTargetName}」使用 {cardName} {cardIcon} 吗？"
+            : $"确定使用 {cardName} {cardIcon} 吗？";
+        var confirm = MessageBox.Show(confirmMsg, "确认使用卡片", MessageBoxButton.YesNo, MessageBoxImage.Question);
+        if (confirm != MessageBoxResult.Yes) return;
+
+        // 确认后 invoke
         try
         {
             OnUseCard?.Invoke(cardName, target, extra);
@@ -243,7 +277,8 @@ public partial class CardModal : Window
             MessageBox.Show($"使用卡片失败：{ex.Message}", "错误", MessageBoxButton.OK, MessageBoxImage.Error);
         }
 
-        MessageBox.Show($"使用了 {cardName}！", "卡片", MessageBoxButton.OK, MessageBoxImage.Information);
+        // 引擎已执行，结果已在消息栏显示，这里只给简要反馈
+        MessageBox.Show($"✅ 使用了 {cardName}！", "卡片", MessageBoxButton.OK, MessageBoxImage.Information);
 
         UseCardPanel.Visibility = Visibility.Collapsed;
         _selectedCard = null;

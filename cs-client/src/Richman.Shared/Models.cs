@@ -108,6 +108,12 @@ public class Player
     public bool AtFuturesExchange { get; set; }
     public bool AtMarket { get; set; }
     public int Attraction { get; set; }
+
+    // === 期货追缴/强平状态 ===
+    // MarginCallDeadline > 0 表示当前处于追缴状态，剩余天数（到 0 触发强平）
+    public int MarginCallDeadline { get; set; } = -1;
+    public decimal MarginCallRequired { get; set; } = 0;
+    public List<string>? MarginCallContracts { get; set; }
 }
 
 public class StockHolding
@@ -435,6 +441,7 @@ public class CommercialProperty
     public decimal FinalPrice { get; set; }               // 成交价
     public string? WinnerId { get; set; }                 // 中标玩家
     public int Day { get; set; }                          // 拍卖所在的天数
+    public int ClosesOnDay { get; set; }                  // 哪天结算（默认 = Day）
     public bool Closed { get; set; }                      // 是否已成交
     public int Level { get; set; }                        // 升级等级（拍下后可即时半价升级）
 }

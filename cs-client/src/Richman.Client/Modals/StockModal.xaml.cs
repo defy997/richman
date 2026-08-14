@@ -68,6 +68,9 @@ public partial class StockModal : Window
         _player = player;
         _allPlayers = allPlayers ?? new List<Player>();
 
+        // 重置选中状态，避免残留旧股票
+        _selectedStock = null;
+
         // Update sectors
         var sectors = new List<string> { "全部" };
         sectors.AddRange(_allStocks.Select(s => s.Sector).Distinct());
@@ -104,11 +107,12 @@ public partial class StockModal : Window
                 Stock = s
             };
 
-            // Status
+            // Status - 涨停跌停公开，📢 仅在有权限时显示
+            var canSeePrivate = (_player?.AtStockExchange == true) || (_player?.HasTonghuashun == true);
             var statusParts = new List<string>();
             if (s.LimitUp) statusParts.Add("涨停");
             if (s.LimitDown) statusParts.Add("跌停");
-            if (!string.IsNullOrEmpty(s.EventDesc) && s.EventDesc != "无重大事件") statusParts.Add("📢");
+            if (canSeePrivate && !string.IsNullOrEmpty(s.EventDesc) && s.EventDesc != "无重大事件") statusParts.Add("📢");
             stockItem.StatusText = string.Join("", statusParts);
 
             // Holdings
@@ -148,6 +152,8 @@ public partial class StockModal : Window
             : new SolidColorBrush(Color.FromRgb(34, 197, 94));  // 绿 = 跌
         DetailInfo.Text = $"{s.Sector} · {s.Symbol} · 基础价 ${s.Base:F2}";
 
+        var canSeePrivate = (_player?.AtStockExchange == true) || (_player?.HasTonghuashun == true);
+
         if (!string.IsNullOrEmpty(s.EventDesc) && s.EventDesc != "无重大事件")
         {
             DetailEvent.Text = $"📢 {s.EventDesc}";
@@ -158,16 +164,21 @@ public partial class StockModal : Window
             DetailEvent.Visibility = Visibility.Collapsed;
         }
 
-        // News bar
-        if (!string.IsNullOrEmpty(s.News))
+        // Per-stock news: 只有在交易所或有同花顺时才能看到个股消息
+        if (!string.IsNullOrEmpty(s.News) && canSeePrivate)
         {
-            NewsBar.Visibility = Visibility.Visible;
-            NewsText.Text = $"📰 {s.News}";
+            var tail = s.EventDays > 1 ? $"（剩余 {s.EventDays} 天）" : s.EventDays == 1 ? "（今日最后一天）" : "";
+            DetailNews.Text = $"📰 {s.News}{tail}";
+            DetailNews.Foreground = new SolidColorBrush(Color.FromRgb(251, 191, 36));
+            DetailNews.Visibility = Visibility.Visible;
         }
         else
         {
-            NewsBar.Visibility = Visibility.Collapsed;
+            DetailNews.Visibility = Visibility.Collapsed;
         }
+
+        // News bar (bottom): always show market sentiment + other stocks' news
+        UpdateNewsBar(s);
 
         // Update charts
         UpdateKLineChart(s);
@@ -182,6 +193,84 @@ public partial class StockModal : Window
 
         // Trade info
         UpdateTradeInfo();
+    }
+
+    // 始终显示 NewsBar：优先个股 News，否则显示市场整体动态
+    private void UpdateNewsBar(Stock s)
+    {
+        NewsBar.Visibility = Visibility.Visible;
+        var canSeePrivate = (_player?.AtStockExchange == true) || (_player?.HasTonghuashun == true);
+
+        // 1. 个股 News 优先（只在有权限时显示）
+        if (!string.IsNullOrEmpty(s.News) && canSeePrivate)
+        {
+            var tail = s.EventDays > 1 ? $"（剩余 {s.EventDays} 天）" : "（今日最后一天）";
+            NewsText.Text = $"📰 {s.News}{tail}";
+            NewsText.Foreground = new SolidColorBrush(Color.FromRgb(251, 191, 36)); // 黄色
+            return;
+        }
+
+        // 2. 计算市场整体情绪：基于全部股票的 Change 分布
+        var allStocks = _allStocks ?? new List<Stock>();
+        if (allStocks.Count == 0)
+        {
+            NewsText.Text = "📊 暂无市场数据";
+            NewsText.Foreground = new SolidColorBrush(Color.FromRgb(156, 163, 175));
+            return;
+        }
+
+        var upCount = allStocks.Count(x => x.Change > 0);
+        var downCount = allStocks.Count(x => x.Change < 0);
+        var flatCount = allStocks.Count(x => x.Change == 0);
+        var total = allStocks.Count;
+
+        // 找出当前 News 列表（最多展示 3 条）- 只在有权限时包含个股 News
+        var newsCandidates = canSeePrivate
+            ? allStocks.Where(x => !string.IsNullOrEmpty(x.News))
+            : Enumerable.Empty<Stock>();
+        var liveNews = newsCandidates
+            .Select(x => new { x.News, x.EventDays })
+            .Take(3)
+            .ToList();
+
+        string sentiment;
+        Color color;
+        if (upCount > downCount * 1.3m)
+        {
+            sentiment = "市场整体偏多 🟢";
+            color = Color.FromRgb(239, 68, 68); // 红（A 股惯例：涨=红）
+        }
+        else if (downCount > upCount * 1.3m)
+        {
+            sentiment = "市场整体偏空 🔴";
+            color = Color.FromRgb(34, 197, 94); // 绿（A 股惯例：跌=绿）
+        }
+        else
+        {
+            sentiment = "市场震荡整理 🟡";
+            color = Color.FromRgb(251, 191, 36); // 黄
+        }
+
+        NewsText.Foreground = new SolidColorBrush(color);
+
+        if (liveNews.Count > 0)
+        {
+            // 有其他股票的 News：拼接出来
+            var head = $"📊 {sentiment} · 今日 {upCount} 涨 {flatCount} 平 {downCount} 跌 · 市场要闻：";
+            var tail = string.Join(" ｜ ", liveNews.Select(n =>
+                n.EventDays > 1 ? $"{n.News}(剩{n.EventDays}天)" : n.News));
+            NewsText.Text = head + tail;
+        }
+        else if (canSeePrivate)
+        {
+            // 有权限但当前股票无 News
+            NewsText.Text = $"📊 {sentiment} · 今日 {upCount} 涨 {flatCount} 平 {downCount} 跌 · 当前 {s.Name} 暂无个股消息";
+        }
+        else
+        {
+            // 无权限
+            NewsText.Text = $"📊 {sentiment} · 今日 {upCount} 涨 {flatCount} 平 {downCount} 跌 · 🔒 个股消息需进入交易所或购买同花顺";
+        }
     }
 
     private void UpdatePlayerHoldings(Stock s)
@@ -250,13 +339,19 @@ public partial class StockModal : Window
             var unrealizedLoss = (h.ShortAvgCost - s.Price) * shrQty;
             var availableMargin = initialMargin + unrealizedLoss;
             var healthRatio = maintenanceMargin > 0 ? availableMargin / maintenanceMargin : 1;
-            var shortPnl = (h.ShortAvgCost - s.Price) * shrQty;
+            var shortPnl = (h.ShortAvgCost - s.Price) * shrQty * h.ShortLeverage;
+            // 全部平仓预估：买回成本 vs 返还保证金（含盈亏杠杆效应）
+            var allCoverCost = s.Price * shrQty;
+            var allMarginReturn = h.ShortMarginFrozen;
+            var allPnlEst = shortPnl;
+            var coverEstStr = $"{allPnlEst:+#;-#;0}（返${allMarginReturn:N0}）";
 
             ShortInitialMargin.Text = $"${initialMargin:N0}";
             ShortMaintenance.Text = $"${maintenanceMargin:N0}";
             ShortAvailable.Text = $"${availableMargin:N0}";
             ShortHealth.Text = $"{(healthRatio * 100):F0}%";
             ShortPnl.Text = $"{(shortPnl >= 0 ? "+" : "")}${shortPnl:N0}";
+            ShortCoverEstimate.Text = coverEstStr;
 
             var isDanger = healthRatio < 1.5m;
             var isCritical = healthRatio < 1.0m;
@@ -285,15 +380,38 @@ public partial class StockModal : Window
         if (_selectedStock == null) return;
 
         var s = _selectedStock;
+        var h = _player?.Stocks.FirstOrDefault(x => x.Symbol == s.Symbol);
 
-        TradeInfo.Text = _currentAction switch
+        string info;
+        if (_currentAction == "cover")
         {
-            "buy" => $"💰 保证金(从存款): ${s.Price * _quantity / _leverage:N0}（{_leverage}x杠杆）\n现金留给地皮交易",
-            "sell" => $"💵 获得: ${s.Price * _quantity:N0} → 存款",
-            "short" => $"💵 获得现金: ${s.Price * _quantity:N0}\n🔒 保证金(从存款): ${s.Price * _quantity / _leverage:N0}（{_leverage}x杠杆）",
-            "cover" => $"💰 平仓: ${s.Price * _quantity:N0}",
-            _ => ""
-        };
+            // 平空：显示盈亏和返还保证金（默认填最大可平数量）
+            var coverable = h?.ShortQuantity ?? 0;
+            var qty = Math.Min(_quantity, coverable);
+            if (qty == 0)
+            {
+                info = "⚠️ 当前无做空持仓，无需平仓";
+            }
+            else
+            {
+                var coverCost = s.Price * qty;
+                var marginReturn = h!.ShortMarginFrozen * qty / h.ShortQuantity;
+                var pnl = (h.ShortAvgCost - s.Price) * qty;
+                var pnlStr = pnl >= 0 ? $"+${pnl:N0}" : $"-${-pnl:N0}";
+                info = $"💰 买回需付: ${coverCost:N0}\n📊 浮动盈亏: {pnlStr}\n🔓 返还保证金: ${marginReturn:N0}";
+            }
+        }
+        else
+        {
+            info = _currentAction switch
+            {
+                "buy" => $"💰 保证金(从存款): ${s.Price * _quantity / _leverage:N0}（{_leverage}x杠杆）\n现金留给地皮交易",
+                "sell" => $"💵 获得: ${s.Price * _quantity:N0} → 存款",
+                "short" => $"💵 获得现金: ${s.Price * _quantity:N0}\n🔒 保证金(从存款): ${s.Price * _quantity / _leverage:N0}（{_leverage}x杠杆）",
+                _ => ""
+            };
+        }
+        TradeInfo.Text = info;
 
         var actionText = _currentAction switch
         {
@@ -306,7 +424,6 @@ public partial class StockModal : Window
 
         ExecuteBtn.Content = $"确认{actionText}";
 
-        // Leverage visibility
         LeveragePanel.Visibility = (_currentAction == "buy" || _currentAction == "short") ? Visibility.Visible : Visibility.Collapsed;
     }
 
@@ -714,6 +831,18 @@ public partial class StockModal : Window
         {
             _currentAction = action;
             UpdateActionButtons();
+
+            // 平空时：默认填最大可平数量
+            if (action == "cover" && _selectedStock != null)
+            {
+                var h = _player?.Stocks.FirstOrDefault(x => x.Symbol == _selectedStock.Symbol);
+                if (h != null && h.ShortQuantity > 0)
+                {
+                    _quantity = h.ShortQuantity;
+                    UpdateQuantityButtons();
+                }
+            }
+
             UpdateTradeInfo();
         }
     }
@@ -750,6 +879,7 @@ public partial class StockModal : Window
         if (sender is Button btn && int.TryParse(btn.Tag?.ToString(), out var qty))
         {
             _quantity = qty;
+            UpdateQuantityButtons();
             UpdateTradeInfo();
         }
     }

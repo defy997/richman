@@ -39,7 +39,8 @@ public class HoldingDisplayItem
 
 public partial class FuturesModal : Window
 {
-    public event Action<string, int, string, int>? OnTrade;
+    public event Func<string, int, string, int, bool>? OnTrade;
+    public event Action<string, decimal>? OnDepositToMargin;
 
     private List<FuturesContract> _futures = new();
     private Player? _player;
@@ -68,6 +69,18 @@ public partial class FuturesModal : Window
                 SteelCount.Text = player.Materials.Steel.ToString();
                 DepositText.Text = $"${player.Deposit:N0}";
                 CashText.Text = $"${player.Cash:N0}";
+
+                // 追缴横幅
+                if (player.MarginCallDeadline > 0)
+                {
+                    MarginCallBanner.Visibility = Visibility.Visible;
+                    MarginCallDetail.Text = $"需补 ${player.MarginCallRequired:N0}，{player.MarginCallDeadline} 天内未补齐将强平所有持仓";
+                    MarginCallAmount.Text = $"现金: ${player.Cash:N0}";
+                }
+                else
+                {
+                    MarginCallBanner.Visibility = Visibility.Collapsed;
+                }
             }
             else
             {
@@ -76,6 +89,7 @@ public partial class FuturesModal : Window
                 SteelCount.Text = "0";
                 DepositText.Text = "$0";
                 CashText.Text = "$0";
+                MarginCallBanner.Visibility = Visibility.Collapsed;
             }
 
             RefreshList();
@@ -124,7 +138,9 @@ public partial class FuturesModal : Window
                 Price = f.Price,
                 Change = f.Change,
                 StatusText = f.LimitUp ? "🔴 涨停" : f.LimitDown ? "🔵 跌停" : "正常",
-                ExpiryText = $"📅 {f.ExpiresInDays}天到期",
+                ExpiryText = f.ExpiresInDays > 0
+                    ? (f.ExpiresInDays <= 3 ? $"⚠️ {f.ExpiresInDays}天到期" : $"📅 {f.ExpiresInDays}天到期")
+                    : "❗ 已到期（下次开盘自动结算）",
                 Contract = f
             }).ToList();
 
@@ -549,17 +565,29 @@ public partial class FuturesModal : Window
 
         var f = _selected.Contract;
         var cost = f.Price * f.Unit * _quantity;
-        var fee = Math.Floor(cost * 0.02m);
         var margin = _currentAction switch
         {
             "sell" => Math.Ceiling(cost * 0.20m / _leverage),
             _ => Math.Ceiling(cost / _leverage)
         };
+        var atExchange = _player?.AtFuturesExchange ?? false;
+        var discountedMargin = atExchange ? Math.Ceiling(margin / 2) : margin;
 
         CostText.Text = $"${cost:N0}";
-        MarginText.Text = $"${margin:N0}";
-        FeeText.Text = $"${fee:N0}";
-        FrozenText.Text = $"${(margin + fee):N0}";
+        MarginText.Text = atExchange
+            ? $"${discountedMargin:N0}（半价）"
+            : $"${margin:N0}";
+        FeeText.Text = "无";
+        FrozenText.Text = $"${discountedMargin:N0}";
+
+        if (atExchange)
+        {
+            FrozenText.Foreground = new SolidColorBrush(Color.FromRgb(34, 197, 94));
+        }
+        else
+        {
+            FrozenText.Foreground = new SolidColorBrush(Color.FromRgb(249, 115, 22));
+        }
 
         // 交割信息面板 - 仅对建材期货显示
         if (f.IsMaterial && _player != null)
@@ -633,12 +661,55 @@ public partial class FuturesModal : Window
     {
         if (_selected == null) return;
 
-        OnTrade?.Invoke(_selected.Symbol, _quantity, _currentAction, _leverage);
-        MessageBox.Show($"{_currentAction} {_selected.Name} x{_quantity}", "交易成功", MessageBoxButton.OK, MessageBoxImage.Information);
+        var actionLabels = new Dictionary<string, string>
+        {
+            ["buy"] = "做多", ["sell"] = "做空", ["close"] = "平仓",
+            ["delivery"] = "交割", ["exchange"] = "兑换"
+        };
+        var label = actionLabels.GetValueOrDefault(_currentAction, _currentAction);
+
+        // 引擎执行后立刻弹结果（modal打开期间消息被抑制，无法从日志看到结果）
+        var success = OnTrade?.Invoke(_selected.Symbol, _quantity, _currentAction, _leverage) ?? false;
+        if (success)
+        {
+            MessageBox.Show($"✅ {label} {_selected.Name} × {_quantity} 手成功",
+                "交易完成", MessageBoxButton.OK, MessageBoxImage.Information);
+        }
+        else
+        {
+            MessageBox.Show($"❌ {label} {_selected.Name} 失败\n\n可能原因：\n" +
+                           "• 存款不足（保证金不足）\n" +
+                           "• 未站在期货交易所地块\n" +
+                           "• 持仓不足（平仓时）\n" +
+                           "• 合约已到期",
+                "交易失败", MessageBoxButton.OK, MessageBoxImage.Warning);
+        }
     }
 
     private void Close_Click(object sender, RoutedEventArgs e)
     {
         Close();
+    }
+
+    private void DepositToMarginBtn_Click(object sender, RoutedEventArgs e)
+    {
+        if (_player == null) return;
+        if (_player.MarginCallDeadline <= 0) return;
+
+        var amount = _player.Cash;
+        if (amount <= 0)
+        {
+            MessageBox.Show("现金不足，无法补缴", "提示", MessageBoxButton.OK, MessageBoxImage.Warning);
+            return;
+        }
+
+        var confirm = MessageBox.Show(
+            $"确认补缴保证金 ${amount:N0}？（Cash → Deposit）\n当前追缴缺口 ${_player.MarginCallRequired:N0}",
+            "补缴保证金",
+            MessageBoxButton.YesNo,
+            MessageBoxImage.Question);
+        if (confirm != MessageBoxResult.Yes) return;
+
+        OnDepositToMargin?.Invoke(_player.Name, amount);
     }
 }

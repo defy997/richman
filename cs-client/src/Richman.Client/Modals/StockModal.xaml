@@ -165,8 +165,8 @@
                     </ListBox.ItemTemplate>
                 </ListBox>
 
-                <!-- News Bar -->
-                <Border x:Name="NewsBar" Grid.Row="2" Background="#0f172a" Padding="12,8" Visibility="Collapsed">
+                <!-- News Bar (always visible: shows per-stock News when present, else market sentiment) -->
+                <Border x:Name="NewsBar" Grid.Row="2" Background="#0f172a" Padding="12,8">
                     <TextBlock x:Name="NewsText" Text="" Foreground="#fbbf24" FontSize="11"/>
                 </Border>
             </Grid>
@@ -207,6 +207,9 @@
                                 <TextBlock x:Name="DetailInfo" Text="" Foreground="#6b7280" FontSize="11" Margin="0,4,0,0"/>
                                 <TextBlock x:Name="DetailEvent" Text="" Foreground="#f97316" FontSize="11" Margin="0,4,0,0" Visibility="Collapsed"/>
                             </StackPanel>
+
+                            <!-- News: per-stock news shown in detail panel, market sentiment in bottom bar -->
+                            <TextBlock x:Name="DetailNews" Text="" Foreground="#fbbf24" FontSize="11" Margin="0,8,0,0" TextWrapping="Wrap" Visibility="Collapsed"/>
 
                             <!-- K-Line Chart -->
                             <Border Background="#0a0a0f" CornerRadius="6" Margin="0,12,0,0">
@@ -317,6 +320,9 @@
 
                                                 <TextBlock Grid.Row="4" Grid.Column="0" Text="浮动盈亏" Foreground="#6b7280" FontSize="10" Margin="0,2,0,0"/>
                                                 <TextBlock Grid.Row="4" Grid.Column="1" x:Name="ShortPnl" Text="$0" Foreground="#22c55e" FontSize="10" Margin="0,2,0,0"/>
+
+                                                <TextBlock Grid.Row="5" Grid.Column="0" Text="全部平仓预估" Foreground="#6b7280" FontSize="10" Margin="0,4,0,0"/>
+                                                <TextBlock Grid.Row="5" Grid.Column="1" x:Name="ShortCoverEstimate" Text="-" Foreground="#a78bfa" FontSize="10" Margin="0,4,0,0"/>
                                             </Grid>
                                         </StackPanel>
                                     </StackPanel>
